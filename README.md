@@ -26,6 +26,9 @@ npm run dev
 # Lint
 npm run lint
 
+# Verify runtime and migration database connections
+npm run db:check
+
 # Build for production
 npm run build
 ```
@@ -38,22 +41,28 @@ cp .env.example .env.local
 
 Then configure the following variables in `.env.local`:
 
-### Client-safe variables
+### Supabase client configuration
 | Variable | Description |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
 
-### Server-only secrets
+### Server-only configuration
 | Variable | Description |
 |---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (admin access) |
-| `GROQ_API_KEY` | Groq API key for LLM inference |
-| `HUGGINGFACE_API_KEY` | Hugging Face API key for embeddings |
-| `DATABASE_URL` | Supabase connection pooler URL |
-| `DIRECT_URL` | Supabase direct connection URL (for migrations) |
+| `DATABASE_URL` | Supabase pooler URL for runtime application queries |
+| `DIRECT_URL` | Supabase direct URL for migrations and administration |
+
+### Provider credentials reserved for later features
+| Variable | Description |
+|---|---|
+| `GROQ_API_KEY` | Groq API key for future LLM inference |
+| `HUGGINGFACE_API_KEY` | Hugging Face API key for future embeddings |
 
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
+
+`npm run db:check` performs a read-only `SELECT 1` against both `DATABASE_URL` and `DIRECT_URL`. It does not generate, apply, or inspect migrations. The command requires both variables to contain valid connection strings.
 
 ## Project Structure
 
