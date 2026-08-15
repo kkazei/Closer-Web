@@ -45,7 +45,7 @@ Then configure the following variables in `.env.local`:
 | Variable | Description |
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous/public key |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase browser-safe publishable key |
 
 ### Server-only configuration
 | Variable | Description |
@@ -91,6 +91,14 @@ npm run db:seed -- --confirm-development
 
 Without `CLOSER_SEED_AUTH_USER_ID`, the seed skips `profiles` and `business_memberships` because `profiles.id` must reference a real `auth.users.id`.
 
+## Authentication
+
+Closer uses Supabase Auth with `@supabase/ssr` and cookie-backed sessions. The browser client in `src/lib/supabase/client.ts` uses only the public Supabase URL and publishable key. The server client in `src/lib/supabase/server.ts` reads and writes SSR cookies, while `src/proxy.ts` refreshes sessions before requests reach the application.
+
+Server-side identity is resolved from Supabase's verified `auth.getClaims()` result, not from client-supplied IDs or an unverified `getSession()` user object. After sign-up, application-level provisioning creates an idempotent `profiles` row using the exact `auth.users.id`. It does not store passwords, access tokens, or refresh tokens. Business access is represented separately through `business_memberships`.
+
+The minimal `/login`, `/signup`, and protected `/dashboard` routes are authentication smoke tests. The dashboard displays the verified user identity and memberships but is not the final dashboard or authorization system. RLS and complete authorization policies are implemented in the following security phase.
+
 ## Data Access Layer
 
 Database access is centralized in the server-only `src/data/` modules:
@@ -107,7 +115,7 @@ Supabase PostgreSQL
 
 The DAL uses the `server-only` boundary and returns application-facing DTOs rather than raw database rows. Tenant-owned queries require an explicit `businessId` and scope child resources through both their business and parent identifiers. Raw Drizzle queries should not be scattered through routes, Server Components, or services.
 
-Authentication and membership authorization are not implemented yet. The current membership helpers are data lookups only; future authenticated callers must derive profile and business context from verified server-side identity, with RLS added separately.
+Authentication is implemented, but membership authorization is not. The current membership helpers are data lookups only; future authenticated callers must derive profile and business context from verified server-side identity, with RLS added separately.
 
 ## Project Structure
 
@@ -127,4 +135,4 @@ src/
 
 ## Current Status
 
-> **This is the initial project foundation.** Core AI, RAG, lead qualification, chat, authentication, and dashboard features have not yet been implemented. The application currently displays a smoke-test page verifying the foundation is operational.
+> **This is the initial project foundation.** Authentication and a minimal protected-route smoke test are implemented. Core AI, RAG, lead qualification, chat, RLS, and final dashboard features have not yet been implemented.

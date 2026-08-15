@@ -54,6 +54,19 @@ export type MembershipDTO = {
   createdAt: Date;
 };
 
+export type ProfileDTO = {
+  id: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ProfileProvisioningInput = {
+  fullName?: string | null;
+  avatarUrl?: string | null;
+};
+
 export type LeadDTO = {
   id: string;
   businessId: string;

@@ -8,4 +8,5 @@ export * from "./knowledge-documents";
 export * from "./leads";
 export * from "./memberships";
 export * from "./messages";
+export * from "./profiles";
 export * from "./types";
