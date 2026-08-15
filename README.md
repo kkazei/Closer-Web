@@ -97,7 +97,40 @@ Closer uses Supabase Auth with `@supabase/ssr` and cookie-backed sessions. The b
 
 Server-side identity is resolved from Supabase's verified `auth.getClaims()` result, not from client-supplied IDs or an unverified `getSession()` user object. After sign-up, application-level provisioning creates an idempotent `profiles` row using the exact `auth.users.id`. It does not store passwords, access tokens, or refresh tokens. Business access is represented separately through `business_memberships`.
 
-The minimal `/login`, `/signup`, and protected `/dashboard` routes are authentication smoke tests. The dashboard displays the verified user identity and memberships but is not the final dashboard or authorization system. RLS and complete authorization policies are implemented in the following security phase.
+The minimal `/login`, `/signup`, and protected `/dashboard` routes are authentication smoke tests. The dashboard displays the verified user identity and memberships but is not the final dashboard or authorization system. The database security foundation is enforced by PostgreSQL RLS and membership-based policies.
+
+## RLS and database security
+
+Authenticated application access follows this path:
+
+```text
+Supabase Auth
+      ↓
+Verified getClaims() claims
+      ↓
+withAuthenticatedDb()
+      ↓
+Transaction-local authenticated role and auth.uid()
+      ↓
+business_memberships
+      ↓
+PostgreSQL RLS
+      ↓
+Tenant-owned data
+```
+
+The normal `db` handle used by the DAL is request-scoped and fails closed
+outside `withAuthenticatedDb()`. The `privilegedDb` handle uses the trusted
+server connection and is reserved for administrative operations, migrations,
+development seed data, and explicit Auth profile provisioning. It must not be
+used for ordinary user authorization.
+
+RLS is enabled on `businesses`, `profiles`, `business_memberships`, `leads`,
+`chat_sessions`, `messages`, `knowledge_documents`, and `document_chunks`.
+Authenticated access is derived from `auth.uid()` and
+`business_memberships`; anonymous users have no direct access to these private
+tables. The `visitor_id` field groups anonymous sessions but is pseudonymous
+data, not an authentication or authorization credential.
 
 ## Data Access Layer
 
@@ -115,7 +148,11 @@ Supabase PostgreSQL
 
 The DAL uses the `server-only` boundary and returns application-facing DTOs rather than raw database rows. Tenant-owned queries require an explicit `businessId` and scope child resources through both their business and parent identifiers. Raw Drizzle queries should not be scattered through routes, Server Components, or services.
 
-Authentication is implemented, but membership authorization is not. The current membership helpers are data lookups only; future authenticated callers must derive profile and business context from verified server-side identity, with RLS added separately.
+The DAL uses the request-scoped RLS transaction for normal user-scoped reads
+and writes. Tenant-owned queries still require an explicit `businessId` and
+scope child resources through both their business and parent identifiers.
+Membership lookups derive from the verified Auth subject, while privileged
+database access remains explicit and limited to trusted server operations.
 
 ## Project Structure
 
@@ -135,4 +172,8 @@ src/
 
 ## Current Status
 
-> **This is the initial project foundation.** Authentication and a minimal protected-route smoke test are implemented. Core AI, RAG, lead qualification, chat, RLS, and final dashboard features have not yet been implemented.
+> **Current foundation status:** Supabase authentication, the typed DAL, the
+> request-scoped RLS database context, tenant isolation, and the RLS security
+> regression suite are implemented. Anonymous chat, lead scoring, document
+> ingestion, AI/RAG features, rate limiting, and the final dashboard remain
+> future work.

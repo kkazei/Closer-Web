@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getBusinessById } from "@/data";
+import { withAuthenticatedDb } from "@/db";
 import { signOut } from "@/app/auth/actions";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/context";
 
@@ -13,11 +14,15 @@ export default async function DashboardSmokeTestPage() {
     redirect("/login?next=/dashboard");
   }
 
-  const membershipDetails = await Promise.all(
-    user.memberships.map(async (membership) => ({
-      membership,
-      business: await getBusinessById(membership.businessId),
-    })),
+  const membershipDetails = await withAuthenticatedDb(
+    { userId: user.userId },
+    () =>
+      Promise.all(
+        user.memberships.map(async (membership) => ({
+          membership,
+          business: await getBusinessById(membership.businessId),
+        })),
+      ),
   );
 
   return (

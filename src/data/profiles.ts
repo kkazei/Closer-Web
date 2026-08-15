@@ -3,7 +3,7 @@ import "server-only";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, privilegedDb } from "@/db";
 import { profiles } from "@/db/schema";
 
 import { withDataAccess } from "./internal";
@@ -69,7 +69,10 @@ export async function ensureProfileForAuthUser(
   };
 
   return withDataAccess("provision profile", async () => {
-    const [inserted] = await db
+    // Profile provisioning runs immediately after Supabase Auth creates or
+    // signs in a user. It is a trusted server operation, not a user-scoped
+    // data query, so it must name the privileged handle explicitly.
+    const [inserted] = await privilegedDb
       .insert(profiles)
       .values(values)
       .onConflictDoNothing({ target: profiles.id })
@@ -79,7 +82,11 @@ export async function ensureProfileForAuthUser(
       return toProfileDTO(inserted);
     }
 
-    const existing = await getProfileById(normalizedAuthUserId);
+    const [existing] = await privilegedDb
+      .select(profileSelection)
+      .from(profiles)
+      .where(eq(profiles.id, normalizedAuthUserId))
+      .limit(1);
 
     if (!existing) {
       throw new Error("The profile could not be provisioned.");

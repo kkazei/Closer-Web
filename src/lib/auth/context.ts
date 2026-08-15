@@ -2,6 +2,7 @@ import "server-only";
 
 import { getMembershipsForProfile, getProfileById } from "@/data";
 import { assertUuid } from "@/data/validation";
+import { withAuthenticatedDb } from "@/db";
 import { createClient } from "@/lib/supabase/server";
 
 import type { AuthenticatedUser } from "./types";
@@ -27,9 +28,12 @@ export async function getCurrentAuthenticatedUser(): Promise<AuthenticatedUser |
     return null;
   }
 
-  const profile = await getProfileById(userId);
-  const memberships = await getMembershipsForProfile(userId);
   const email = typeof claims.email === "string" ? claims.email : undefined;
 
-  return { userId, email, profile, memberships };
+  return withAuthenticatedDb({ userId }, async () => {
+    const profile = await getProfileById(userId);
+    const memberships = await getMembershipsForProfile(userId);
+
+    return { userId, email, profile, memberships };
+  });
 }
