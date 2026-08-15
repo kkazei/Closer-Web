@@ -91,6 +91,24 @@ npm run db:seed -- --confirm-development
 
 Without `CLOSER_SEED_AUTH_USER_ID`, the seed skips `profiles` and `business_memberships` because `profiles.id` must reference a real `auth.users.id`.
 
+## Data Access Layer
+
+Database access is centralized in the server-only `src/data/` modules:
+
+```text
+Next.js server code
+        ↓
+Data Access Layer
+        ↓
+Drizzle
+        ↓
+Supabase PostgreSQL
+```
+
+The DAL uses the `server-only` boundary and returns application-facing DTOs rather than raw database rows. Tenant-owned queries require an explicit `businessId` and scope child resources through both their business and parent identifiers. Raw Drizzle queries should not be scattered through routes, Server Components, or services.
+
+Authentication and membership authorization are not implemented yet. The current membership helpers are data lookups only; future authenticated callers must derive profile and business context from verified server-side identity, with RLS added separately.
+
 ## Project Structure
 
 ```
