@@ -1,14 +1,9 @@
-/**
- * Drizzle schema definitions for Closer.
- *
- * Schema tables will be added here in the next task
- * (Database + Supabase foundation).
- *
- * Example usage:
- *   export { leads } from "./leads";
- *   export { chatSessions } from "./chat-sessions";
- */
-
-// Placeholder export — required for TypeScript module resolution.
-// Replace with actual table exports when schema is defined.
-export {};
+export * from "./businesses";
+export * from "./chat-sessions";
+export * from "./document-chunks";
+export * from "./enums";
+export * from "./knowledge-documents";
+export * from "./leads";
+export * from "./memberships";
+export * from "./messages";
+export * from "./profiles";
