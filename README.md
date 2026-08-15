@@ -64,6 +64,33 @@ Then configure the following variables in `.env.local`:
 
 `npm run db:check` performs a read-only `SELECT 1` against both `DATABASE_URL` and `DIRECT_URL`. It does not generate, apply, or inspect migrations. The command requires both variables to contain valid connection strings.
 
+## Development seed
+
+After applying the initial migration, the development-only seed can be run with an explicit confirmation:
+
+```bash
+CLOSER_SEED_MODE=development npm run db:seed -- --confirm-development
+```
+
+On PowerShell:
+
+```powershell
+$env:CLOSER_SEED_MODE = "development"
+npm run db:seed -- --confirm-development
+```
+
+The seed uses `DIRECT_URL`, upserts deterministic demo records, and can be run repeatedly. It refuses to run when `NODE_ENV=production`, when the explicit development confirmation is missing, or before a Drizzle migration has been applied. It never creates Supabase Auth users or passwords.
+
+To associate the demo data with an existing Supabase Auth user, provide that user's UUID without exposing a password or service credential:
+
+```powershell
+$env:CLOSER_SEED_AUTH_USER_ID = "existing-auth-user-uuid"
+$env:CLOSER_SEED_MODE = "development"
+npm run db:seed -- --confirm-development
+```
+
+Without `CLOSER_SEED_AUTH_USER_ID`, the seed skips `profiles` and `business_memberships` because `profiles.id` must reference a real `auth.users.id`.
+
 ## Project Structure
 
 ```

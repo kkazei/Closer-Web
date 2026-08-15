@@ -10,7 +10,8 @@
     "db:check": "node scripts/check-database-connections.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "db:seed": "node scripts/seed-development.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
