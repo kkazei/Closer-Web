@@ -3,6 +3,7 @@ import {
   check,
   foreignKey,
   integer,
+  index,
   jsonb,
   pgTable,
   text,
@@ -47,6 +48,12 @@ export const messages = pgTable(
       foreignColumns: [chatSessions.businessId, chatSessions.id],
       name: "messages_business_session_fk",
     }).onDelete("cascade"),
+    index("messages_business_session_created_at_id_idx").on(
+      table.businessId,
+      table.sessionId,
+      table.createdAt,
+      table.id,
+    ),
     check(
       "messages_content_not_blank",
       sql`length(trim(${table.content})) > 0`,

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
+  index,
   jsonb,
   pgTable,
   text,
@@ -49,6 +50,11 @@ export const knowledgeDocuments = pgTable(
     unique("knowledge_documents_business_id_id_unique").on(
       table.businessId,
       table.id,
+    ),
+    index("knowledge_documents_business_status_updated_at_idx").on(
+      table.businessId,
+      table.status,
+      table.updatedAt.desc(),
     ),
     check(
       "knowledge_documents_name_not_blank",

@@ -1,5 +1,6 @@
 import {
   foreignKey,
+  index,
   pgTable,
   primaryKey,
   timestamp,
@@ -31,6 +32,7 @@ export const businessMemberships = pgTable(
       foreignColumns: [profiles.id],
       name: "business_memberships_profile_id_fk",
     }).onDelete("cascade"),
+    index("business_memberships_profile_id_idx").on(table.profileId),
     primaryKey({
       columns: [table.businessId, table.profileId],
       name: "business_memberships_pkey",

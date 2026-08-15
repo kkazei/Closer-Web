@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
+  index,
   jsonb,
   pgTable,
   smallint,
@@ -54,6 +55,19 @@ export const leads = pgTable(
     }).onDelete("restrict"),
     // Required so child tables can reference (business_id, id).
     unique("leads_business_id_id_unique").on(table.businessId, table.id),
+    index("leads_business_created_at_idx").on(
+      table.businessId,
+      table.createdAt.desc(),
+    ),
+    index("leads_business_status_created_at_idx").on(
+      table.businessId,
+      table.qualificationStatus,
+      table.createdAt.desc(),
+    ),
+    index("leads_business_score_idx").on(
+      table.businessId,
+      table.score.desc(),
+    ),
     check(
       "leads_score_range",
       sql`${table.score} is null or ${table.score} between 0 and 100`,

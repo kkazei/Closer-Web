@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   foreignKey,
+  index,
   pgTable,
   timestamp,
   unique,
@@ -52,6 +53,14 @@ export const chatSessions = pgTable(
     unique("chat_sessions_business_id_id_unique").on(
       table.businessId,
       table.id,
+    ),
+    index("chat_sessions_business_updated_at_idx").on(
+      table.businessId,
+      table.updatedAt.desc(),
+    ),
+    index("chat_sessions_business_lead_idx").on(
+      table.businessId,
+      table.leadId,
     ),
   ],
 );
