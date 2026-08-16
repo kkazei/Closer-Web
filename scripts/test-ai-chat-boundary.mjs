@@ -33,6 +33,7 @@ const fixture = {
   visitorId: randomUUID(),
   businessSlug: undefined,
   messageIds: [],
+  leadId: undefined,
 };
 
 function requestFor(body, { cookie, ip } = {}) {
@@ -147,6 +148,50 @@ async function main() {
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("authorization"), "Bearer test-key");
 
+    const requestBody = JSON.parse(String(init?.body ?? "{}"));
+
+    if (requestBody.response_format?.type === "json_object") {
+      return new Response(
+        JSON.stringify({
+          id: "test-extraction",
+          object: "chat.completion",
+          created: 0,
+          model: "llama-3.3-70b-versatile",
+          choices: [
+            {
+              index: 0,
+              message: {
+                role: "assistant",
+                content: JSON.stringify({
+                  name: "Alex Morgan",
+                  email: "alex.morgan@example.test",
+                  company: "Orbit Systems",
+                  role: "Head of Revenue",
+                  companySize: "51-200",
+                  useCase: "Qualify inbound demo requests.",
+                  budget: "$2,000-$5,000/month",
+                  timeline: "This quarter",
+                  productInterest: "Website qualification assistant",
+                  buyingIntent: "High",
+                  qualificationComplete: true,
+                }),
+              },
+              finish_reason: "stop",
+            },
+          ],
+          usage: {
+            prompt_tokens: 12,
+            completion_tokens: 12,
+            total_tokens: 24,
+          },
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
     const encoder = new TextEncoder();
     const chunks = [
       `data: ${JSON.stringify({
@@ -236,6 +281,29 @@ async function main() {
   assert.equal(streamedRows[1].total_tokens, 10);
   fixture.messageIds.push(...streamedRows.map(({ id }) => id));
 
+  const [createdLead] = await direct`
+    select
+      id::text,
+      qualification_status,
+      score,
+      score_breakdown
+    from public.leads
+    where id = (
+      select lead_id
+      from public.chat_sessions
+      where id = ${fixture.sessionId}::uuid
+    )
+  `;
+  assert.ok(createdLead, "stream completion should create a lead");
+  assert.equal(createdLead.qualification_status, "qualified");
+  assert.equal(createdLead.score, 100);
+  assert.deepEqual(createdLead.score_breakdown, {
+    fit: 35,
+    intent: 35,
+    readiness: 30,
+  });
+  fixture.leadId = createdLead.id;
+
   const userMessage = await insertAnonymousChatMessage({
     sessionId: fixture.sessionId,
     visitorId: fixture.visitorId,
@@ -293,6 +361,13 @@ try {
     delete from public.chat_sessions
     where id = ${fixture.sessionId}::uuid
   `;
+
+  if (fixture.leadId) {
+    await direct`
+      delete from public.leads
+      where id = ${fixture.leadId}::uuid
+    `;
+  }
 
   await direct.end({ timeout: 5 });
   await closePrivilegedDb();

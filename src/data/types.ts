@@ -82,6 +82,7 @@ export type LeadDTO = {
   buyingIntent: string | null;
   qualificationStatus: LeadStatus;
   score: number | null;
+  scoreBreakdown: JsonObject;
   scoreExplanation: string | null;
   createdAt: Date;
   updatedAt: Date;

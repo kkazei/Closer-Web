@@ -6,10 +6,15 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 
+import {
+  extractLeadFromConversation,
+  type LeadExtractionConversationMessage,
+} from "@/ai/lead-extraction";
 import { GROQ_CHAT_MODEL, getGroqChatModel } from "@/ai";
 import {
   getAnonymousChatContext,
   insertAnonymousChatMessage,
+  saveAnonymousLeadQualification,
 } from "@/data/public-chat";
 import {
   isVisitorUuid,
@@ -258,7 +263,7 @@ export async function POST(request: Request): Promise<Response> {
         }
 
         try {
-          await insertAnonymousChatMessage({
+          const assistantMessage = await insertAnonymousChatMessage({
             sessionId: context.sessionId,
             visitorId: validVisitorId,
             role: "assistant",
@@ -268,10 +273,42 @@ export async function POST(request: Request): Promise<Response> {
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
           });
+
+          if (!assistantMessage) {
+            return;
+          }
         } catch (error) {
           console.error(
             "Assistant message persistence failed.",
             error instanceof Error ? error.message : "Unknown persistence error",
+          );
+
+          return;
+        }
+
+        try {
+          const extractionConversation: LeadExtractionConversationMessage[] = [
+            ...context.history,
+            { role: "user", content: body.message },
+            { role: "assistant", content: text },
+          ];
+          const extraction = await extractLeadFromConversation(
+            extractionConversation,
+          );
+
+          await saveAnonymousLeadQualification({
+            sessionId: context.sessionId,
+            visitorId: validVisitorId,
+            businessSlug: body.businessSlug,
+            extraction,
+          });
+        } catch (error) {
+          // Lead qualification is deliberately best-effort after the chat
+          // response has completed. It must never replace a successful reply
+          // with an AI extraction or persistence error.
+          console.error(
+            "Lead qualification failed.",
+            error instanceof Error ? error.message : "Unknown qualification error",
           );
         }
       },

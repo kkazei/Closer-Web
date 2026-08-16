@@ -16,6 +16,8 @@
     "db:test-rls-security": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rls-security.mjs",
     "db:test-public-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-public-chat-boundary.mjs",
     "db:test-ai-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-chat-boundary.mjs",
+    "test-ai-lead": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-lead-qualification.mjs",
+    "db:test-ai-lead": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-lead-pipeline.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -31,7 +33,8 @@
     "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "server-only": "^0.0.1"
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

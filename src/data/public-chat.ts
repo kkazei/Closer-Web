@@ -3,7 +3,14 @@ import "server-only";
 import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 
 import { privilegedDb } from "@/db";
-import { businesses, chatSessions, messages } from "@/db/schema";
+import { businesses, chatSessions, leads, messages } from "@/db/schema";
+import {
+  calculateLeadQualification,
+  hasLeadSignal,
+  type LeadExtraction,
+  type LeadQualificationStatus,
+  type LeadSignalFields,
+} from "@/lib/lead-qualification";
 
 import {
   assertEnumValue,
@@ -44,6 +51,19 @@ type InsertAnonymousChatMessageInput = Readonly<{
   model?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+}>;
+
+type SaveAnonymousLeadQualificationInput = Readonly<{
+  sessionId: string;
+  visitorId: string;
+  businessSlug: string;
+  extraction: LeadExtraction;
+}>;
+
+export type AnonymousLeadQualification = Readonly<{
+  leadId: string;
+  qualificationStatus: LeadQualificationStatus;
+  score: number;
 }>;
 
 const MAX_HISTORY_MESSAGES = 40;
@@ -258,5 +278,183 @@ export async function insertAnonymousChatMessage(
       );
 
     return message;
+  });
+}
+
+function mergeLeadFields(
+  extraction: LeadExtraction,
+  existingLead: LeadSignalFields | null,
+): LeadSignalFields {
+  return {
+    name: extraction.name ?? existingLead?.name ?? null,
+    email: extraction.email ?? existingLead?.email ?? null,
+    company: extraction.company ?? existingLead?.company ?? null,
+    role: extraction.role ?? existingLead?.role ?? null,
+    companySize: extraction.companySize ?? existingLead?.companySize ?? null,
+    useCase: extraction.useCase ?? existingLead?.useCase ?? null,
+    budget: extraction.budget ?? existingLead?.budget ?? null,
+    timeline: extraction.timeline ?? existingLead?.timeline ?? null,
+    productInterest:
+      extraction.productInterest ?? existingLead?.productInterest ?? null,
+    buyingIntent:
+      extraction.buyingIntent ?? existingLead?.buyingIntent ?? null,
+  };
+}
+
+/**
+ * Controlled anonymous lead boundary.
+ *
+ * This is intentionally separate from the authenticated leads DAL. Anonymous
+ * chat has no RLS identity, so the route may use this narrowly scoped trusted
+ * operation after it has verified the visitor cookie, active session, and
+ * business slug. The score and status are recalculated here from extracted
+ * fields; callers cannot supply trusted derived values.
+ */
+export async function saveAnonymousLeadQualification(
+  input: SaveAnonymousLeadQualificationInput,
+): Promise<AnonymousLeadQualification | null> {
+  const sessionId = assertUuid(input.sessionId, "sessionId");
+  const visitorId = assertUuid(input.visitorId, "visitorId");
+  const businessSlug = assertNonBlank(
+    input.businessSlug,
+    "businessSlug",
+  ).trim().toLowerCase();
+
+  return privilegedDb.transaction(async (transaction) => {
+    const [session] = await transaction
+      .select({
+        sessionId: chatSessions.id,
+        businessId: chatSessions.businessId,
+        leadId: chatSessions.leadId,
+      })
+      .from(chatSessions)
+      .innerJoin(businesses, eq(businesses.id, chatSessions.businessId))
+      .where(
+        and(
+          eq(chatSessions.id, sessionId),
+          eq(chatSessions.visitorId, visitorId),
+          eq(businesses.slug, businessSlug),
+          eq(chatSessions.status, "active"),
+          gt(chatSessions.expiresAt, new Date()),
+          isNull(businesses.archivedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!session) {
+      return null;
+    }
+
+    let existingLead: (LeadSignalFields & { id: string }) | null = null;
+
+    if (session.leadId) {
+      const [lead] = await transaction
+        .select({
+          id: leads.id,
+          name: leads.name,
+          email: leads.email,
+          company: leads.company,
+          role: leads.role,
+          companySize: leads.companySize,
+          useCase: leads.useCase,
+          budget: leads.budget,
+          timeline: leads.timeline,
+          productInterest: leads.productInterest,
+          buyingIntent: leads.buyingIntent,
+        })
+        .from(leads)
+        .where(
+          and(
+            eq(leads.id, session.leadId),
+            eq(leads.businessId, session.businessId),
+          ),
+        )
+        .limit(1);
+
+      if (!lead) {
+        throw new Error("The chat session points to a missing lead.");
+      }
+
+      existingLead = lead;
+    }
+
+    if (!existingLead && !hasLeadSignal(input.extraction)) {
+      return null;
+    }
+
+    const mergedFields = mergeLeadFields(input.extraction, existingLead);
+    const qualification = calculateLeadQualification({
+      ...mergedFields,
+      qualificationComplete: input.extraction.qualificationComplete,
+    });
+    const now = new Date();
+
+    if (existingLead) {
+      const [updatedLead] = await transaction
+        .update(leads)
+        .set({
+          ...mergedFields,
+          qualificationStatus: qualification.qualificationStatus,
+          score: qualification.score,
+          scoreBreakdown: qualification.scoreBreakdown,
+          scoreExplanation: qualification.scoreExplanation,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(leads.id, existingLead.id),
+            eq(leads.businessId, session.businessId),
+          ),
+        )
+        .returning({ id: leads.id });
+
+      if (!updatedLead) {
+        throw new Error("The anonymous lead was not updated.");
+      }
+
+      return {
+        leadId: updatedLead.id,
+        qualificationStatus: qualification.qualificationStatus,
+        score: qualification.score,
+      };
+    }
+
+    const [createdLead] = await transaction
+      .insert(leads)
+      .values({
+        businessId: session.businessId,
+        ...mergedFields,
+        qualificationStatus: qualification.qualificationStatus,
+        score: qualification.score,
+        scoreBreakdown: qualification.scoreBreakdown,
+        scoreExplanation: qualification.scoreExplanation,
+      })
+      .returning({ id: leads.id });
+
+    if (!createdLead) {
+      throw new Error("The anonymous lead was not created.");
+    }
+
+    const [associatedSession] = await transaction
+      .update(chatSessions)
+      .set({ leadId: createdLead.id, updatedAt: now })
+      .where(
+        and(
+          eq(chatSessions.id, session.sessionId),
+          eq(chatSessions.businessId, session.businessId),
+          isNull(chatSessions.leadId),
+        ),
+      )
+      .returning({ id: chatSessions.id });
+
+    if (!associatedSession) {
+      throw new Error("The anonymous lead was not associated with its session.");
+    }
+
+    return {
+      leadId: createdLead.id,
+      qualificationStatus: qualification.qualificationStatus,
+      score: qualification.score,
+    };
   });
 }

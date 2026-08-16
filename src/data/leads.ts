@@ -13,6 +13,7 @@ import {
   assertListLimit,
   assertListOffset,
   assertUuid,
+  toJsonObject,
 } from "./validation";
 import {
   LEAD_STATUSES,
@@ -38,6 +39,7 @@ const leadSelection = {
   buyingIntent: leads.buyingIntent,
   qualificationStatus: leads.qualificationStatus,
   score: leads.score,
+  scoreBreakdown: leads.scoreBreakdown,
   scoreExplanation: leads.scoreExplanation,
   createdAt: leads.createdAt,
   updatedAt: leads.updatedAt,
@@ -59,6 +61,7 @@ type LeadRow = Pick<
   | "buyingIntent"
   | "qualificationStatus"
   | "score"
+  | "scoreBreakdown"
   | "scoreExplanation"
   | "createdAt"
   | "updatedAt"
@@ -80,6 +83,7 @@ function toLeadDTO(row: LeadRow): LeadDTO {
     buyingIntent: row.buyingIntent,
     qualificationStatus: row.qualificationStatus,
     score: row.score,
+    scoreBreakdown: toJsonObject(row.scoreBreakdown),
     scoreExplanation: row.scoreExplanation,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

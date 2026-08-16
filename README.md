@@ -182,8 +182,18 @@ The current model is `llama-3.3-70b-versatile`. `GROQ_API_KEY` is read only on
 the server. Message creation is limited to 20 requests per minute per
 session/visitor/network abuse key in the current in-memory limiter. This is a
 best-effort free-tier control; a shared limiter is required before scaling
-across multiple serverless instances. AI chat currently has no RAG, embedding,
-lead extraction, or lead scoring context.
+across multiple serverless instances. After a successful response, AI-002 sends
+the server-loaded conversation to a separate structured extraction call. The
+result is Zod-validated and normalized before it is merged into the lead
+associated with `chat_sessions.lead_id`. If the session has no lead and the
+conversation contains a signal, a lead is created and associated with that
+session. Missing extraction values never erase previously stored lead values.
+
+The LLM never writes the trusted score or status. Server-side deterministic code
+calculates a 0-100 score from fit, intent, and readiness signals, stores the
+numeric `score_breakdown`, and derives `qualification_status` and
+`score_explanation`. The current phase does not implement RAG, embeddings,
+knowledge ingestion, or dashboard functionality.
 
 ## Data Access Layer
 
@@ -229,5 +239,6 @@ src/
 > request-scoped RLS database context, tenant isolation, and the RLS security
 > regression suite are implemented. Anonymous session creation is now available
 > through the narrow public boundary above, and Groq streaming chat now persists
-> user and assistant messages. Lead scoring, document ingestion, embeddings,
-> RAG, distributed rate limiting, and the final dashboard remain future work.
+> user and assistant messages. Structured lead extraction and deterministic lead
+> scoring are now implemented. Document ingestion, embeddings, RAG, distributed
+> rate limiting, and the final dashboard remain future work.
