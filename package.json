@@ -14,6 +14,7 @@
     "db:test-leads-chat-sessions-messages-rls": "node scripts/test-leads-chat-sessions-messages-rls.mjs",
     "db:test-knowledge-documents-chunks-rls": "node scripts/test-knowledge-documents-chunks-rls.mjs",
     "db:test-rls-security": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rls-security.mjs",
+    "db:test-public-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-public-chat-boundary.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

@@ -132,6 +132,31 @@ Authenticated access is derived from `auth.uid()` and
 tables. The `visitor_id` field groups anonymous sessions but is pseudonymous
 data, not an authentication or authorization credential.
 
+## Anonymous chat boundary
+
+`POST /api/chat/session` is the only public anonymous-chat boundary currently
+implemented. It accepts JSON in the narrow form
+`{ "businessSlug": "northstar-labs" }`. It resolves the slug against an
+active business, creates a session with the database's 30-day expiration
+default, and returns only the new `sessionId` and `expiresAt`. There is no
+public session-read endpoint.
+
+The route generates or reuses the `closer_visitor_id` cookie. The cookie is
+`HttpOnly`, `Secure`, `SameSite=Lax`, scoped to `/`, and is treated only as a
+pseudonymous grouping identifier. `businessId` and `visitorId` in the request
+body are rejected; the server chooses both the database business ID and the
+visitor UUID. Invalid or archived businesses return the same safe 404 response.
+
+Session creation is protected by a small in-memory fixed-window limiter keyed
+by the request abuse signal, visitor cookie when present, and business slug.
+Malformed requests have a separate short-window limit. This uses no paid
+service or new environment variable and is appropriate for the current
+single-instance/free-tier boundary; in-memory limits are not globally shared
+across serverless instances. Before production scale, replace this limiter
+with a shared store and add message-level limits. The route uses the existing
+trusted `privilegedDb` only through the dedicated server-only public-chat data
+function; it does not expose the service-role key or weaken anonymous RLS.
+
 ## Data Access Layer
 
 Database access is centralized in the server-only `src/data/` modules:
@@ -174,6 +199,7 @@ src/
 
 > **Current foundation status:** Supabase authentication, the typed DAL, the
 > request-scoped RLS database context, tenant isolation, and the RLS security
-> regression suite are implemented. Anonymous chat, lead scoring, document
-> ingestion, AI/RAG features, rate limiting, and the final dashboard remain
-> future work.
+> regression suite are implemented. Anonymous session creation is now available
+> through the narrow public boundary above. Message-level anonymous chat,
+> lead scoring, document ingestion, AI/RAG features, distributed rate limiting,
+> and the final dashboard remain future work.

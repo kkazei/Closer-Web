@@ -18,6 +18,12 @@ async function resolveTypeScriptModule(specifier, context, nextResolve) {
 }
 
 export async function resolve(specifier, context, nextResolve) {
+  // Node's standalone loader does not apply Next's extensionless package
+  // subpath resolution when importing a route handler directly in tests.
+  if (specifier === "next/server") {
+    return nextResolve("next/server.js", context, nextResolve);
+  }
+
   if (specifier === "server-only") {
     return {
       url: "data:text/javascript,export default {};",
