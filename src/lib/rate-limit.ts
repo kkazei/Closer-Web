@@ -2,6 +2,8 @@ import "server-only";
 
 export const ANONYMOUS_SESSION_CREATION_LIMIT = 5;
 export const ANONYMOUS_SESSION_CREATION_WINDOW_MS = 10 * 60 * 1000;
+export const ANONYMOUS_MESSAGE_LIMIT = 20;
+export const ANONYMOUS_MESSAGE_WINDOW_MS = 60 * 1000;
 export const MALFORMED_REQUEST_LIMIT = 20;
 export const MALFORMED_REQUEST_WINDOW_MS = 60 * 1000;
 
@@ -18,6 +20,14 @@ export type RateLimitResult = Readonly<{
   allowed: boolean;
   retryAfterSeconds: number;
 }>;
+
+export function getRequestAbuseKey(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0];
+  const realIp = request.headers.get("x-real-ip");
+  const candidate = (forwarded ?? realIp ?? "unknown").trim();
+
+  return candidate.length > 0 && candidate.length <= 128 ? candidate : "unknown";
+}
 
 function pruneBuckets(now: number): void {
   if (buckets.size < MAX_BUCKETS) {
@@ -72,6 +82,14 @@ export function consumeAnonymousSessionRateLimit(key: string): RateLimitResult {
     `anonymous-session:${key}`,
     ANONYMOUS_SESSION_CREATION_LIMIT,
     ANONYMOUS_SESSION_CREATION_WINDOW_MS,
+  );
+}
+
+export function consumeAnonymousMessageRateLimit(key: string): RateLimitResult {
+  return consume(
+    `anonymous-message:${key}`,
+    ANONYMOUS_MESSAGE_LIMIT,
+    ANONYMOUS_MESSAGE_WINDOW_MS,
   );
 }
 

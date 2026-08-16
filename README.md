@@ -54,10 +54,10 @@ Then configure the following variables in `.env.local`:
 | `DATABASE_URL` | Supabase pooler URL for runtime application queries |
 | `DIRECT_URL` | Supabase direct URL for migrations and administration |
 
-### Provider credentials reserved for later features
+### AI provider configuration
 | Variable | Description |
 |---|---|
-| `GROQ_API_KEY` | Groq API key for future LLM inference |
+| `GROQ_API_KEY` | Server-only Groq API key for chat generation |
 | `HUGGINGFACE_API_KEY` | Hugging Face API key for future embeddings |
 
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
@@ -157,6 +157,34 @@ with a shared store and add message-level limits. The route uses the existing
 trusted `privilegedDb` only through the dedicated server-only public-chat data
 function; it does not expose the service-role key or weaken anonymous RLS.
 
+## AI chat boundary
+
+`POST /api/chat` accepts only:
+
+```json
+{
+  "businessSlug": "northstar-labs",
+  "sessionId": "chat-session-uuid",
+  "message": "How does this work?"
+}
+```
+
+The route requires the matching `closer_visitor_id` cookie and verifies the
+session, business, active status, and expiration server-side. It loads the
+conversation history from the database rather than trusting client-supplied
+history, persists the user message, and streams a Groq response as plain text.
+After a successful stream, the assistant response and token usage are stored
+in `messages`. Expired or cookie-mismatched sessions return a safe 404, and
+client-supplied `businessId`, `visitorId`, or message-history fields are not
+accepted.
+
+The current model is `llama-3.3-70b-versatile`. `GROQ_API_KEY` is read only on
+the server. Message creation is limited to 20 requests per minute per
+session/visitor/network abuse key in the current in-memory limiter. This is a
+best-effort free-tier control; a shared limiter is required before scaling
+across multiple serverless instances. AI chat currently has no RAG, embedding,
+lead extraction, or lead scoring context.
+
 ## Data Access Layer
 
 Database access is centralized in the server-only `src/data/` modules:
@@ -200,6 +228,6 @@ src/
 > **Current foundation status:** Supabase authentication, the typed DAL, the
 > request-scoped RLS database context, tenant isolation, and the RLS security
 > regression suite are implemented. Anonymous session creation is now available
-> through the narrow public boundary above. Message-level anonymous chat,
-> lead scoring, document ingestion, AI/RAG features, distributed rate limiting,
-> and the final dashboard remain future work.
+> through the narrow public boundary above, and Groq streaming chat now persists
+> user and assistant messages. Lead scoring, document ingestion, embeddings,
+> RAG, distributed rate limiting, and the final dashboard remain future work.

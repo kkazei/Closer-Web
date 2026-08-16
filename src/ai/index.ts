@@ -1,3 +1,21 @@
+import "server-only";
+
+import { createGroq } from "@ai-sdk/groq";
+import type { LanguageModel } from "ai";
+
+/** The server-side Groq model used by the first Closer chat endpoint. */
+export const GROQ_CHAT_MODEL = "llama-3.3-70b-versatile" as const;
+
+export function getGroqChatModel(): LanguageModel {
+  const apiKey = process.env.GROQ_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("GROQ_API_KEY is not configured.");
+  }
+
+  return createGroq({ apiKey })(GROQ_CHAT_MODEL);
+}
+
 /**
  * AI Provider abstraction for Closer.
  *
@@ -8,8 +26,8 @@
  * Architecture:
  *   UI → Application Services → AI Provider → Database / RAG
  *
- * The concrete GroqProvider implementation will be added
- * when the AI chat feature is built.
+ * The first Groq model factory is implemented above. Future providers should
+ * remain behind this module instead of being imported by route handlers.
  */
 
 /**

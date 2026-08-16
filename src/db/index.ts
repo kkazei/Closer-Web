@@ -30,6 +30,11 @@ const client = postgres(connectionString, {
  */
 export const privilegedDb = drizzle(client, { schema });
 
+/** Closes the trusted client for short-lived integration test processes. */
+export async function closePrivilegedDb(): Promise<void> {
+  await client.end({ timeout: 5 });
+}
+
 export type Database = PostgresJsDatabase<typeof schema>;
 
 const requestDatabaseStorage = new AsyncLocalStorage<Database>();

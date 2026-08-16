@@ -1,21 +1,22 @@
-import { randomUUID } from "node:crypto";
-
 import { NextResponse } from "next/server";
 
 import { createAnonymousChatSession } from "@/data/public-chat";
 import {
+  getOrCreateAnonymousVisitorId,
+  isVisitorUuid,
+  readAnonymousVisitorId,
+  setAnonymousVisitorCookie,
+} from "@/lib/anonymous-chat";
+import {
   consumeAnonymousSessionRateLimit,
   consumeMalformedRequestRateLimit,
+  getRequestAbuseKey,
 } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const VISITOR_COOKIE_NAME = "closer_visitor_id";
-const VISITOR_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 const MAX_REQUEST_BYTES = 4 * 1024;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUSINESS_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 type PublicSessionBody = Readonly<{
@@ -39,42 +40,6 @@ function errorResponse(
   }
 
   return noStore(response);
-}
-
-function getRequestFingerprint(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0];
-  const realIp = request.headers.get("x-real-ip");
-  const candidate = (forwarded ?? realIp ?? "unknown").trim();
-
-  return candidate.length > 0 && candidate.length <= 128 ? candidate : "unknown";
-}
-
-function getCookie(request: Request, name: string): string | undefined {
-  const cookieHeader = request.headers.get("cookie");
-
-  if (!cookieHeader) {
-    return undefined;
-  }
-
-  for (const cookie of cookieHeader.split(";")) {
-    const separatorIndex = cookie.indexOf("=");
-
-    if (separatorIndex < 0) {
-      continue;
-    }
-
-    const cookieName = cookie.slice(0, separatorIndex).trim();
-
-    if (cookieName === name) {
-      return cookie.slice(separatorIndex + 1).trim();
-    }
-  }
-
-  return undefined;
-}
-
-function isUuid(value: string | undefined): value is string {
-  return value !== undefined && UUID_PATTERN.test(value);
 }
 
 function normalizeBusinessSlug(value: unknown): string | null {
@@ -159,7 +124,7 @@ async function parseBody(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const requestFingerprint = getRequestFingerprint(request);
+  const requestFingerprint = getRequestAbuseKey(request);
   const body = await parseBody(request);
 
   if (!body) {
@@ -172,11 +137,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     return errorResponse(400, "Invalid request.");
   }
 
-  const suppliedVisitorId = getCookie(request, VISITOR_COOKIE_NAME);
-  const validCookieVisitorId = isUuid(suppliedVisitorId)
+  const suppliedVisitorId = readAnonymousVisitorId(request);
+  const validCookieVisitorId = isVisitorUuid(suppliedVisitorId)
     ? suppliedVisitorId
     : undefined;
-  const visitorId = validCookieVisitorId ?? randomUUID();
+  const visitorId = getOrCreateAnonymousVisitorId(request);
   const rateLimitIdentity = validCookieVisitorId ?? "no-cookie";
   const limit = consumeAnonymousSessionRateLimit(
     `${requestFingerprint}:${rateLimitIdentity}:${body.businessSlug}`,
@@ -206,17 +171,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       ),
     );
 
-    response.cookies.set({
-      name: VISITOR_COOKIE_NAME,
-      value: visitorId,
-      httpOnly: true,
-      secure: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: VISITOR_COOKIE_MAX_AGE_SECONDS,
-    });
-
-    return response;
+    return setAnonymousVisitorCookie(response, visitorId);
   } catch {
     return errorResponse(500, "Unable to create chat session.");
   }

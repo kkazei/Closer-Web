@@ -17,6 +17,7 @@ if (!process.env.DIRECT_URL) {
 }
 
 const { POST } = await import("../src/app/api/chat/session/route.ts");
+const { closePrivilegedDb } = await import("../src/db/index.ts");
 const {
   ANONYMOUS_SESSION_CREATION_LIMIT,
   MALFORMED_REQUEST_LIMIT,
@@ -255,6 +256,7 @@ try {
   `;
 
   await direct.end({ timeout: 5 });
+  await closePrivilegedDb();
 }
 
-process.exit(testError ? 1 : 0);
+process.exitCode = testError ? 1 : 0;
