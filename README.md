@@ -58,7 +58,7 @@ Then configure the following variables in `.env.local`:
 | Variable | Description |
 |---|---|
 | `GROQ_API_KEY` | Server-only Groq API key for chat generation |
-| `HUGGINGFACE_API_KEY` | Hugging Face API key for future embeddings |
+| `HF_TOKEN` | Server-only Hugging Face token with Inference Providers permission |
 
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
 
@@ -192,8 +192,47 @@ session. Missing extraction values never erase previously stored lead values.
 The LLM never writes the trusted score or status. Server-side deterministic code
 calculates a 0-100 score from fit, intent, and readiness signals, stores the
 numeric `score_breakdown`, and derives `qualification_status` and
-`score_explanation`. The current phase does not implement RAG, embeddings,
-knowledge ingestion, or dashboard functionality.
+`score_explanation`. Retrieval and RAG answer generation are not implemented;
+knowledge ingestion is documented below, while dashboard functionality remains
+future work.
+
+## Knowledge ingestion
+
+RAG-001 adds a server-only ingestion operation for plain-text knowledge
+documents. It is not exposed as a public anonymous route or dashboard UI yet.
+An authenticated business owner or admin must provide the business and
+document context; the operation verifies that membership in the RLS-aware
+request transaction before using the trusted server database handle for the
+final chunk write. Members can read knowledge but cannot initiate ingestion.
+
+The pipeline is:
+
+```text
+plain text → normalize → paragraph-aware chunks → Hugging Face embeddings →
+384-dimensional pgvector chunks → ready
+```
+
+It uses `sentence-transformers/all-MiniLM-L6-v2` through Hugging Face's current
+router feature-extraction endpoint. `HF_TOKEN` is server-only and is never
+stored in document metadata, database rows, logs, or responses. The model's
+384-dimensional vectors are validated exactly; invalid dimensions are rejected.
+
+Chunking targets 1,200 characters with a 180-character suffix overlap and a
+hard 1,600-character chunk limit. Paragraphs are grouped first, then split at
+sentence and word boundaries when oversized. Each document is limited to
+100,000 normalized characters and 100 chunks, with a two-minute ingestion
+budget and at most two bounded retries for transient provider failures.
+
+Supported input in this phase is plain text only. PDF, DOCX, spreadsheets,
+crawling, OCR, retrieval, query embeddings, vector similarity search, HNSW,
+and RAG prompt integration are not implemented yet.
+
+Documents use the existing lifecycle: `draft` or `failed` → `processing` →
+`ready`; archived documents cannot be ingested. Embeddings are generated
+before replacing existing chunks. The old chunk set remains intact if
+generation fails, while successful re-ingestion atomically replaces all
+chunks and marks the document ready. Failed runs mark the document `failed`
+without deleting a previous good chunk set.
 
 ## Data Access Layer
 
@@ -240,5 +279,7 @@ src/
 > regression suite are implemented. Anonymous session creation is now available
 > through the narrow public boundary above, and Groq streaming chat now persists
 > user and assistant messages. Structured lead extraction and deterministic lead
-> scoring are now implemented. Document ingestion, embeddings, RAG, distributed
-> rate limiting, and the final dashboard remain future work.
+> scoring are now implemented. Plain-text knowledge ingestion and embedding
+> persistence are implemented as the RAG-001 server boundary. Retrieval, RAG
+> answer generation, distributed rate limiting, and the final dashboard remain
+> future work.

@@ -3,8 +3,8 @@ import "server-only";
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { and, asc, eq } from "drizzle-orm";
 
-import { db } from "@/db";
-import { documentChunks } from "@/db/schema";
+import { db, privilegedDb } from "@/db";
+import { documentChunks, knowledgeDocuments } from "@/db/schema";
 
 import { getKnowledgeDocumentByBusinessId } from "./knowledge-documents";
 import { withDataAccess, invalidInput, notFound } from "./internal";
@@ -18,6 +18,7 @@ import {
 import type {
   CreateDocumentChunkInput,
   DocumentChunkDTO,
+  EmbeddedDocumentChunkInput,
 } from "./types";
 
 const documentChunkSelection = {
@@ -168,4 +169,88 @@ export async function replaceDocumentChunks(
       return rows.map(toDocumentChunkDTO);
     }),
   );
+}
+
+/**
+ * Trusted ingestion boundary. Ordinary authenticated clients have SELECT-only
+ * access to document_chunks under RLS; this function is used only after the
+ * caller has completed request-scoped owner/admin authorization.
+ *
+ * Chunk replacement and the document's transition to ready are committed in
+ * one privileged transaction. If insertion or the status transition fails,
+ * the previous chunk set remains intact.
+ */
+export async function replaceDocumentChunksWithEmbeddings(
+  businessId: string,
+  documentId: string,
+  inputs: EmbeddedDocumentChunkInput[],
+): Promise<DocumentChunkDTO[]> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+  const normalizedDocumentId = assertUuid(documentId, "documentId");
+
+  if (inputs.length === 0) {
+    invalidInput("At least one embedded document chunk is required.");
+  }
+
+  const values = inputs.map((input) => ({
+    businessId: normalizedBusinessId,
+    documentId: normalizedDocumentId,
+    chunkIndex: assertNonNegativeInteger(input.chunkIndex, "chunkIndex"),
+    content: assertNonBlank(input.content, "content"),
+    metadata: input.metadata
+      ? assertJsonObject(input.metadata, "metadata")
+      : {},
+    embedding: input.embedding,
+    embeddingModel: assertNonBlank(input.embeddingModel, "embeddingModel"),
+  }));
+
+  return privilegedDb.transaction(async (transaction) => {
+    const [document] = await transaction
+      .select({ id: knowledgeDocuments.id })
+      .from(knowledgeDocuments)
+      .where(
+        and(
+          eq(knowledgeDocuments.businessId, normalizedBusinessId),
+          eq(knowledgeDocuments.id, normalizedDocumentId),
+          eq(knowledgeDocuments.status, "processing"),
+        ),
+      )
+      .limit(1);
+
+    if (!document) {
+      throw new Error("The document is no longer available for ingestion.");
+    }
+
+    await transaction
+      .delete(documentChunks)
+      .where(
+        and(
+          eq(documentChunks.businessId, normalizedBusinessId),
+          eq(documentChunks.documentId, normalizedDocumentId),
+        ),
+      );
+
+    const rows = await transaction
+      .insert(documentChunks)
+      .values(values)
+      .returning(documentChunkSelection);
+
+    const [readyDocument] = await transaction
+      .update(knowledgeDocuments)
+      .set({ status: "ready", updatedAt: new Date() })
+      .where(
+        and(
+          eq(knowledgeDocuments.businessId, normalizedBusinessId),
+          eq(knowledgeDocuments.id, normalizedDocumentId),
+          eq(knowledgeDocuments.status, "processing"),
+        ),
+      )
+      .returning({ id: knowledgeDocuments.id });
+
+    if (!readyDocument) {
+      throw new Error("The document could not be marked ready.");
+    }
+
+    return rows.map(toDocumentChunkDTO);
+  });
 }

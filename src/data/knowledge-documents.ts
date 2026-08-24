@@ -1,9 +1,9 @@
 import "server-only";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, privilegedDb } from "@/db";
 import { knowledgeDocuments } from "@/db/schema";
 
 import { withDataAccess, notFound } from "./internal";
@@ -201,9 +201,61 @@ export async function updateKnowledgeDocumentStatus(
   });
 }
 
+/**
+ * Atomically claims a document for ingestion. The status predicate prevents
+ * two concurrent owner/admin requests from both replacing the same document.
+ */
+export async function beginKnowledgeDocumentIngestion(
+  businessId: string,
+  documentId: string,
+): Promise<KnowledgeDocumentDTO> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+  const normalizedDocumentId = assertUuid(documentId, "documentId");
+
+  return withDataAccess("start knowledge document ingestion", async () => {
+    const [row] = await db
+      .update(knowledgeDocuments)
+      .set({ status: "processing", updatedAt: new Date() })
+      .where(
+        and(
+          eq(knowledgeDocuments.businessId, normalizedBusinessId),
+          eq(knowledgeDocuments.id, normalizedDocumentId),
+          inArray(knowledgeDocuments.status, ["draft", "ready", "failed"]),
+        ),
+      )
+      .returning(knowledgeDocumentSelection);
+
+    if (!row) {
+      throw new Error("The knowledge document is already being processed.");
+    }
+
+    return toKnowledgeDocumentDTO(row);
+  });
+}
+
 export async function archiveKnowledgeDocument(
   businessId: string,
   documentId: string,
 ): Promise<KnowledgeDocumentDTO> {
   return updateKnowledgeDocumentStatus(businessId, documentId, "archived");
+}
+
+/** Marks a failed ingestion without changing or deleting existing chunks. */
+export async function markKnowledgeDocumentIngestionFailed(
+  businessId: string,
+  documentId: string,
+): Promise<void> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+  const normalizedDocumentId = assertUuid(documentId, "documentId");
+
+  await privilegedDb
+    .update(knowledgeDocuments)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(
+      and(
+        eq(knowledgeDocuments.businessId, normalizedBusinessId),
+        eq(knowledgeDocuments.id, normalizedDocumentId),
+        eq(knowledgeDocuments.status, "processing"),
+      ),
+    );
 }

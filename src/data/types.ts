@@ -204,3 +204,8 @@ export type CreateDocumentChunkInput = {
   content: string;
   metadata?: JsonObject;
 };
+
+export type EmbeddedDocumentChunkInput = CreateDocumentChunkInput & {
+  embedding: number[];
+  embeddingModel: string;
+};
