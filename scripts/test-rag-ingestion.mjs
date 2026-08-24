@@ -60,29 +60,28 @@ function fakeProvider({ failOnCall } = {}) {
 }
 
 try {
-  const [membership] = await direct`
-    select profile_id::text as profile_id
-    from public.business_memberships
-    where role in ('owner', 'admin')
-    order by created_at
-    limit 1
+  actorId = randomUUID();
+
+  await direct`
+    insert into auth.users (
+      id, aud, role, email, created_at, updated_at, is_sso_user, is_anonymous
+    )
+    values (
+      ${actorId}::uuid,
+      'authenticated',
+      'authenticated',
+      ${`rag-ingestion-test-${actorId}@example.invalid`},
+      now(),
+      now(),
+      false,
+      false
+    )
   `;
 
-  assert.ok(
-    membership?.profile_id,
-    "an existing owner/admin membership is required; seed an Auth profile first",
-  );
-  actorId = membership.profile_id;
-
-  const [business] = await direct`
-    select business_id::text as business_id
-    from public.business_memberships
-    where profile_id = ${actorId}::uuid
-      and role in ('owner', 'admin')
-    order by created_at
-    limit 1
+  await direct`
+    insert into public.profiles (id, full_name)
+    values (${actorId}::uuid, 'RAG ingestion test owner')
   `;
-  assert.ok(business?.business_id);
 
   await direct`
     insert into public.businesses (id, name, slug)
@@ -197,7 +196,7 @@ try {
       and document_id = ${documentId}::uuid
     order by chunk_index
   `;
-  assert.deepEqual(replacedChunks, [
+  assert.deepEqual(Array.from(replacedChunks), [
     {
       chunk_index: 0,
       content: "Replacement knowledge content.",
@@ -236,6 +235,14 @@ try {
     await direct`
       delete from public.business_memberships
       where business_id = ${businessAId}::uuid
+    `;
+    await direct`
+      delete from public.profiles
+      where id = ${actorId}::uuid
+    `;
+    await direct`
+      delete from auth.users
+      where id = ${actorId}::uuid
     `;
     await direct`
       delete from public.businesses
