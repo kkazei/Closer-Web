@@ -178,7 +178,7 @@ in `messages`. Expired or cookie-mismatched sessions return a safe 404, and
 client-supplied `businessId`, `visitorId`, or message-history fields are not
 accepted.
 
-The current model is `llama-3.3-70b-versatile`. `GROQ_API_KEY` is read only on
+The current model is `openai/gpt-oss-120b`. `GROQ_API_KEY` is read only on
 the server. Message creation is limited to 20 requests per minute per
 session/visitor/network abuse key in the current in-memory limiter. This is a
 best-effort free-tier control; a shared limiter is required before scaling
@@ -192,9 +192,9 @@ session. Missing extraction values never erase previously stored lead values.
 The LLM never writes the trusted score or status. Server-side deterministic code
 calculates a 0-100 score from fit, intent, and readiness signals, stores the
 numeric `score_breakdown`, and derives `qualification_status` and
-`score_explanation`. Retrieval and RAG answer generation are not implemented;
-knowledge ingestion is documented below, while dashboard functionality remains
-future work.
+`score_explanation`. Tenant-scoped knowledge retrieval is implemented below
+and is now integrated into the anonymous Groq chat boundary. Dashboard
+functionality remains future work.
 
 ## Knowledge ingestion
 
@@ -224,8 +224,8 @@ sentence and word boundaries when oversized. Each document is limited to
 budget and at most two bounded retries for transient provider failures.
 
 Supported input in this phase is plain text only. PDF, DOCX, spreadsheets,
-crawling, OCR, retrieval, query embeddings, vector similarity search, HNSW,
-and RAG prompt integration are not implemented yet.
+crawling, and OCR are not implemented yet. Retrieval and query embeddings are
+documented below; HNSW remains future work.
 
 Documents use the existing lifecycle: `draft` or `failed` → `processing` →
 `ready`; archived documents cannot be ingested. Embeddings are generated
@@ -233,6 +233,42 @@ before replacing existing chunks. The old chunk set remains intact if
 generation fails, while successful re-ingestion atomically replaces all
 chunks and marks the document ready. Failed runs mark the document `failed`
 without deleting a previous good chunk set.
+
+## Knowledge retrieval and grounded chat
+
+The server-only `retrieveKnowledge` primitive accepts an
+explicit business ID and query, embeds the query with the same
+`sentence-transformers/all-MiniLM-L6-v2` model used during ingestion, validates
+the 384-dimensional result, and performs an exact pgvector cosine-distance
+search. The application converts distance to cosine similarity with
+`1 - distance`, where `1` means identical direction and `0` means orthogonal
+vectors.
+
+Retrieval always applies the requested `business_id` filter, requires the
+related document to have `ready` status, and requires the canonical embedding
+model. Results are filtered by the initial configurable similarity threshold
+of `0.55` and bounded to `1` through `10` chunks, with a default of `5`.
+The threshold is an initial conservative value that must be calibrated during
+RAG evaluation.
+
+The function uses the request-scoped RLS database handle and therefore must be
+called inside `withAuthenticatedDb()` for authenticated application access.
+The anonymous `/api/chat` boundary uses a separate trusted server-only adapter
+only after the session, visitor cookie, business, and expiration have been
+validated. That adapter applies the same explicit tenant filter; it does not
+create an anonymous table policy or expose direct chunk access.
+
+For each chat message, the route retrieves eligible chunks for the validated
+session business, builds a bounded context block, and places it below the
+higher-priority system instructions. Retrieved text is explicitly treated as
+untrusted reference material: it cannot change the assistant's role, reveal
+secrets, or override system instructions. The assistant message stores only
+safe retrieval metadata (`ragUsed`, `retrievedChunkIds`, and
+`retrievalCount`), never embeddings or provider credentials. If no chunk clears
+the threshold, the assistant receives a no-results instruction and must not
+invent business-specific facts. Retrieval/provider failure returns a generic
+server error rather than silently answering without the required knowledge
+boundary.
 
 ## Data Access Layer
 

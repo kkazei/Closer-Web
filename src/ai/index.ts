@@ -3,8 +3,8 @@ import "server-only";
 import { createGroq } from "@ai-sdk/groq";
 import type { LanguageModel } from "ai";
 
-/** The server-side Groq model used by the first Closer chat endpoint. */
-export const GROQ_CHAT_MODEL = "llama-3.3-70b-versatile" as const;
+/** The server-side Groq model used by the Closer chat endpoint. */
+export const GROQ_CHAT_MODEL = "openai/gpt-oss-120b" as const;
 
 export function getGroqChatModel(): LanguageModel {
   const apiKey = process.env.GROQ_API_KEY;
@@ -34,7 +34,7 @@ export function getGroqChatModel(): LanguageModel {
  * Configuration for an AI provider.
  */
 export interface AIProviderConfig {
-  /** The model identifier (e.g., "llama-3.3-70b-versatile") */
+  /** The model identifier (e.g., "openai/gpt-oss-120b") */
   model: string;
   /** Maximum tokens for completion */
   maxTokens?: number;

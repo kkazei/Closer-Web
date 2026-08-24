@@ -14,6 +14,7 @@ import {
 
 import {
   assertEnumValue,
+  assertJsonObject,
   assertNonBlank,
   assertNonNegativeInteger,
   assertUuid,
@@ -51,6 +52,7 @@ type InsertAnonymousChatMessageInput = Readonly<{
   model?: string | null;
   inputTokens?: number | null;
   outputTokens?: number | null;
+  metadata?: Record<string, unknown>;
 }>;
 
 type SaveAnonymousLeadQualificationInput = Readonly<{
@@ -259,7 +261,10 @@ export async function insertAnonymousChatMessage(
                 input.inputTokens + input.outputTokens,
                 "totalTokens",
               )
-            : null,
+             : null,
+        metadata: input.metadata
+          ? assertJsonObject(input.metadata, "metadata")
+          : {},
       })
       .returning({ id: messages.id });
 

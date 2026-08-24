@@ -145,18 +145,33 @@ async function main() {
 
   process.env.GROQ_API_KEY = "test-key";
   globalThis.fetch = async (_input, init) => {
+    const url = String(_input);
+
+    if (url.includes("huggingface.co")) {
+      return new Response(
+        JSON.stringify(Array.from({ length: 384 }, () => 0.01)),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    }
+
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("authorization"), "Bearer test-key");
 
     const requestBody = JSON.parse(String(init?.body ?? "{}"));
 
-    if (requestBody.response_format?.type === "json_object") {
+    if (
+      requestBody.response_format?.type === "json_object" ||
+      requestBody.response_format?.type === "json_schema"
+    ) {
       return new Response(
         JSON.stringify({
           id: "test-extraction",
           object: "chat.completion",
           created: 0,
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           choices: [
             {
               index: 0,
@@ -198,7 +213,7 @@ async function main() {
         id: "test-response",
         object: "chat.completion.chunk",
         created: 0,
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         choices: [
           {
             index: 0,
@@ -211,7 +226,7 @@ async function main() {
         id: "test-response",
         object: "chat.completion.chunk",
         created: 0,
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         choices: [
           { index: 0, delta: {}, finish_reason: "stop" },
         ],
@@ -275,7 +290,7 @@ async function main() {
     ],
   );
   assert.equal(streamedRows[1].provider, "groq");
-  assert.equal(streamedRows[1].model, "llama-3.3-70b-versatile");
+  assert.equal(streamedRows[1].model, "openai/gpt-oss-120b");
   assert.equal(streamedRows[1].input_tokens, 7);
   assert.equal(streamedRows[1].output_tokens, 3);
   assert.equal(streamedRows[1].total_tokens, 10);
