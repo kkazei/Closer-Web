@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 
 import postgres from "postgres";
 
@@ -11,63 +12,48 @@ if (existsSync(".env")) {
   process.loadEnvFile(".env");
 }
 
-const requiredEnvironment = [
-  "CLOSER_RLS_TEST_BUSINESS_ID",
-  "CLOSER_RLS_TEST_OTHER_BUSINESS_ID",
-  "CLOSER_RLS_TEST_MEMBER_USER_ID",
-  "CLOSER_RLS_TEST_OWNER_USER_ID",
-  "CLOSER_RLS_TEST_ADMIN_USER_ID",
-  "CLOSER_RLS_TEST_NON_MEMBER_USER_ID",
-];
-
-const missing = requiredEnvironment.filter((name) => !process.env[name]);
-
-if (missing.length > 0) {
-  throw new Error(
-    `Missing helper test environment variable(s): ${missing.join(", ")}`,
-  );
-}
-
 if (!process.env.DIRECT_URL) {
   throw new Error("DIRECT_URL is not configured.");
 }
 
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function readUuid(name) {
-  const value = process.env[name];
-
-  if (!value || !uuidPattern.test(value)) {
-    throw new Error(`${name} must be a valid UUID.`);
-  }
-
-  return value;
-}
-
-const fixture = {
-  businessId: readUuid("CLOSER_RLS_TEST_BUSINESS_ID"),
-  otherBusinessId: readUuid("CLOSER_RLS_TEST_OTHER_BUSINESS_ID"),
-  memberUserId: readUuid("CLOSER_RLS_TEST_MEMBER_USER_ID"),
-  ownerUserId: readUuid("CLOSER_RLS_TEST_OWNER_USER_ID"),
-  adminUserId: readUuid("CLOSER_RLS_TEST_ADMIN_USER_ID"),
-  nonMemberUserId: readUuid("CLOSER_RLS_TEST_NON_MEMBER_USER_ID"),
-};
-
-const roles = ["owner", "admin", "member"];
 const client = postgres(process.env.DIRECT_URL, {
   max: 1,
   prepare: false,
 });
 
-async function asAuthenticatedUser(userId, callback) {
-  return client.begin(async (transaction) => {
-    await transaction.unsafe("set local role authenticated");
-    await transaction`select set_config('request.jwt.claim.sub', ${userId}, true)`;
-    await transaction`select set_config('request.jwt.claim.role', 'authenticated', true)`;
+const rollback = Symbol("rollback");
+const roles = ["owner", "admin", "member"];
 
-    return callback(transaction);
-  });
+function fixtureUser(label) {
+  const id = randomUUID();
+  return {
+    id,
+    email: `closer-authz-${label}-${id}@example.invalid`,
+  };
+}
+
+async function insertAuthUser(transaction, user) {
+  await transaction`
+    insert into auth.users (
+      id, aud, role, email, created_at, updated_at, is_sso_user, is_anonymous
+    ) values (
+      ${user.id}::uuid,
+      'authenticated',
+      'authenticated',
+      ${user.email},
+      now(),
+      now(),
+      false,
+      false
+    )
+  `;
+}
+
+async function asAuthenticatedUser(transaction, userId, callback) {
+  await transaction.unsafe("set local role authenticated");
+  await transaction`select set_config('request.jwt.claim.sub', ${userId}, true)`;
+  await transaction`select set_config('request.jwt.claim.role', 'authenticated', true)`;
+  return callback(transaction);
 }
 
 async function isBusinessMember(transaction, businessId) {
@@ -79,129 +65,154 @@ async function isBusinessMember(transaction, businessId) {
 }
 
 async function hasBusinessRole(transaction, businessId, role) {
-  const [row] = await transaction.unsafe(`
+  const [row] = await transaction`
     select private.has_business_role(
-      '${businessId}'::uuid,
-      ARRAY['${role}']::public.membership_role[]
+      ${businessId}::uuid,
+      array[${role}]::public.membership_role[]
     ) as result
-  `);
+  `;
 
   return row?.result === true;
 }
 
 async function runTests() {
-  const memberResults = await asAuthenticatedUser(
-    fixture.memberUserId,
-    async (transaction) => {
-      const [identity] = await transaction`
-        select auth.uid()::text as user_id
+  await client.begin(async (transaction) => {
+    const [businessA, businessB] = await transaction`
+      select id::text, slug
+      from public.businesses
+      order by slug
+      limit 2
+    `;
+
+    assert.ok(businessA?.id && businessB?.id, "two businesses are required");
+
+    const owner = fixtureUser("owner");
+    const admin = fixtureUser("admin");
+    const member = fixtureUser("member");
+    const nonMember = fixtureUser("non-member");
+
+    await transaction.unsafe("set local role postgres");
+    for (const user of [owner, admin, member, nonMember]) {
+      await insertAuthUser(transaction, user);
+      await transaction`
+        insert into public.profiles (id, full_name)
+        values (${user.id}::uuid, ${user.email})
       `;
-      const [nullBusiness] = await transaction`
-        select private.is_business_member(null::uuid) as result
-      `;
-      const [emptyRoles] = await transaction.unsafe(`
-        select private.has_business_role(
-          '${fixture.businessId}'::uuid,
-          ARRAY[]::public.membership_role[]
-        ) as result
-      `);
+    }
 
-      return {
-        identityMatches: identity?.user_id === fixture.memberUserId,
-        businessMember: await isBusinessMember(
-          transaction,
-          fixture.businessId,
-        ),
-        otherBusinessMember: await isBusinessMember(
-          transaction,
-          fixture.otherBusinessId,
-        ),
-        nonexistentBusinessMember: await isBusinessMember(
-          transaction,
-          "00000000-0000-4000-8000-000000000999",
-        ),
-        nullBusiness: nullBusiness?.result,
-        emptyRoles: emptyRoles?.result,
-      };
-    },
-  );
+    await transaction`
+      insert into public.business_memberships (business_id, profile_id, role)
+      values
+        (${businessA.id}::uuid, ${owner.id}::uuid, 'owner'),
+        (${businessA.id}::uuid, ${admin.id}::uuid, 'admin'),
+        (${businessA.id}::uuid, ${member.id}::uuid, 'member')
+    `;
 
-  assert.equal(memberResults.identityMatches, true);
-  assert.equal(memberResults.businessMember, true);
-  assert.equal(memberResults.otherBusinessMember, false);
-  assert.equal(memberResults.nonexistentBusinessMember, false);
-  assert.equal(memberResults.nullBusiness, false);
-  assert.equal(memberResults.emptyRoles, false);
+    const memberResults = await asAuthenticatedUser(
+      transaction,
+      member.id,
+      async (scoped) => {
+        const [identity] = await scoped`
+          select auth.uid()::text as user_id
+        `;
+        const [nullBusiness] = await scoped`
+          select private.is_business_member(null::uuid) as result
+        `;
+        const [emptyRoles] = await scoped`
+          select private.has_business_role(
+            ${businessA.id}::uuid,
+            array[]::public.membership_role[]
+          ) as result
+        `;
 
-  const roleFixtures = [
-    { name: "owner", userId: fixture.ownerUserId },
-    { name: "admin", userId: fixture.adminUserId },
-    { name: "member", userId: fixture.memberUserId },
-  ];
-
-  for (const roleFixture of roleFixtures) {
-    const roleResults = await asAuthenticatedUser(
-      roleFixture.userId,
-      async (transaction) =>
-        Object.fromEntries(
-          await Promise.all(
-            roles.map(async (role) => [
-              role,
-              await hasBusinessRole(
-                transaction,
-                fixture.businessId,
-                role,
-              ),
-            ]),
+        return {
+          identityMatches: identity?.user_id === member.id,
+          businessMember: await isBusinessMember(scoped, businessA.id),
+          otherBusinessMember: await isBusinessMember(scoped, businessB.id),
+          nonexistentBusinessMember: await isBusinessMember(
+            scoped,
+            "00000000-0000-4000-8000-000000000999",
           ),
-        ),
+          nullBusiness: nullBusiness?.result,
+          emptyRoles: emptyRoles?.result,
+        };
+      },
     );
 
-    for (const role of roles) {
-      assert.equal(
-        roleResults[role],
-        role === roleFixture.name,
-        `${roleFixture.name} role check for ${role} did not match`,
+    assert.deepEqual(memberResults, {
+      identityMatches: true,
+      businessMember: true,
+      otherBusinessMember: false,
+      nonexistentBusinessMember: false,
+      nullBusiness: false,
+      emptyRoles: false,
+    });
+
+    for (const [name, user] of [
+      ["owner", owner],
+      ["admin", admin],
+      ["member", member],
+    ]) {
+      const results = await asAuthenticatedUser(
+        transaction,
+        user.id,
+        async (scoped) =>
+          Object.fromEntries(
+            await Promise.all(
+              roles.map(async (role) => [
+                role,
+                await hasBusinessRole(scoped, businessA.id, role),
+              ]),
+            ),
+          ),
       );
+
+      for (const role of roles) {
+        assert.equal(
+          results[role],
+          role === name,
+          `${name} role check for ${role} did not match`,
+        );
+      }
     }
-  }
 
-  const nonMemberResult = await asAuthenticatedUser(
-    fixture.nonMemberUserId,
-    (transaction) => isBusinessMember(transaction, fixture.businessId),
-  );
-  assert.equal(nonMemberResult, false);
+    const nonMemberResult = await asAuthenticatedUser(
+      transaction,
+      nonMember.id,
+      (scoped) => isBusinessMember(scoped, businessA.id),
+    );
+    assert.equal(nonMemberResult, false);
 
-  const anonymousDenied = await client.begin(async (transaction) => {
+    await transaction.unsafe("reset request.jwt.claim.sub");
+    await transaction.unsafe("reset request.jwt.claim.role");
     await transaction.unsafe("set local role anon");
 
-    try {
-      await transaction`
-        select private.is_business_member(${fixture.businessId}::uuid) as result
-      `;
-    } catch {
-      return true;
+    await assert.rejects(
+      () => transaction`
+        select private.is_business_member(${businessA.id}::uuid) as result
+      `,
+      "anonymous helper execution must be denied",
+    );
+
+    console.log("Authorization helper tests passed in a rollback-only transaction.");
+    console.log("Authenticated identity, membership, role, null, and anonymous checks passed.");
+
+    throw rollback;
+  }).catch((error) => {
+    if (error !== rollback) {
+      throw error;
     }
-
-    return false;
   });
-
-  assert.equal(anonymousDenied, true);
-
-  console.log("Authorization helper tests passed.");
-  console.log("Authenticated identity context: verified");
-  console.log("Member/non-member business checks: passed");
-  console.log("Owner/admin/member role checks: passed");
-  console.log("NULL/empty/nonexistent input checks: passed");
-  console.log("Anonymous helper execution denial: passed");
 }
 
 try {
   await runTests();
 } catch (error) {
   console.error("Authorization helper tests failed.");
-  console.error(error instanceof Error ? error.message : error);
+  console.error(error instanceof Error ? error.stack : error);
   process.exitCode = 1;
 } finally {
   await client.end({ timeout: 5 });
 }
+
+process.exit(process.exitCode ?? 0);

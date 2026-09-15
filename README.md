@@ -26,6 +26,10 @@ npm run dev
 # Lint
 npm run lint
 
+# TypeScript and reusable unit tests
+npm run typecheck
+npm run test
+
 # Verify runtime and migration database connections
 npm run db:check
 
@@ -63,6 +67,42 @@ Then configure the following variables in `.env.local`:
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
 
 `npm run db:check` performs a read-only `SELECT 1` against both `DATABASE_URL` and `DIRECT_URL`. It does not generate, apply, or inspect migrations. The command requires both variables to contain valid connection strings.
+
+## Testing
+
+Closer uses two complementary test layers:
+
+- Jest covers reusable deterministic logic: lead extraction normalization,
+  deterministic qualification/scoring, input validation, chunking, RAG context
+  construction, and embedding-provider behavior. Run it with `npm run test`.
+- Database and provider boundary scripts remain the authoritative integration
+  tests. They exercise real PostgreSQL RLS, tenant filtering, Supabase Auth
+  identity context, pgvector retrieval, anonymous chat ownership, and the
+  Groq/Hugging Face boundaries without replacing them with mocks.
+
+The deterministic RAG evaluation set covers relevant and irrelevant questions,
+multiple relevant chunks, ready-document filtering, model mismatch, top-K and
+similarity thresholds, tenant isolation, no-result behavior, and
+prompt-injection-style retrieved content. The grounded-chat integration test
+also verifies that retrieved content is marked untrusted and cannot replace
+higher-priority system instructions.
+
+Database fixture suites should be run sequentially because several use the
+same seeded businesses while others create temporary rollback-only fixtures.
+The live RAG smoke test requires configured server-only `GROQ_API_KEY` and
+`HF_TOKEN` values:
+
+```bash
+npm run db:check
+npm run db:test-authz-helpers
+npm run db:test-rls-security
+npm run db:test-rag-retrieval
+npm run db:test-rag-chat
+npm run db:test-rag-chat-live
+```
+
+No test writes credentials, embeddings, or fixture data that persists after
+its cleanup/rollback boundary.
 
 ## Development seed
 

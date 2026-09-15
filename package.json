@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "test:unit": "jest --runInBand",
     "db:check": "node scripts/check-database-connections.mjs",
     "db:test-authz-helpers": "node scripts/test-authorization-helpers.mjs",
     "db:test-business-profile-rls": "node scripts/test-business-profile-rls.mjs",
@@ -45,13 +48,16 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@swc/jest": "^0.2.39",
     "@tailwindcss/postcss": "^4",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "jest": "^30.5.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
