@@ -1,90 +1,203 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
 
-import { getBusinessById } from "@/data";
-import { withAuthenticatedDb } from "@/db";
-import { signOut } from "@/app/auth/actions";
-import { getCurrentAuthenticatedUser } from "@/lib/auth/context";
+import {
+  getLeadOverviewByBusinessId,
+  listChatSessionsByBusinessId,
+  listLeadsByBusinessId,
+} from "@/data";
+
+import {
+  EmptyState,
+  formatDashboardDate,
+  MetricCard,
+  NoBusinessState,
+  ScoreDisplay,
+  SectionHeading,
+  StatusPill,
+} from "./_components/dashboard-ui";
+import { dashboardHref, getDashboardContext, withDashboardDb } from "./_lib";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardSmokeTestPage() {
-  const user = await getCurrentAuthenticatedUser();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ business?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const selectedBusinessId =
+    typeof params.business === "string" ? params.business : undefined;
+  const context = await getDashboardContext(selectedBusinessId);
 
-  if (!user) {
-    redirect("/login?next=/dashboard");
+  if (!context.business) {
+    return <NoBusinessState />;
   }
 
-  const membershipDetails = await withAuthenticatedDb(
-    { userId: user.userId },
-    () =>
-      Promise.all(
-        user.memberships.map(async (membership) => ({
-          membership,
-          business: await getBusinessById(membership.businessId),
-        })),
-      ),
+  const data = await withDashboardDb(context, () =>
+    Promise.all([
+      getLeadOverviewByBusinessId(context.business!.id),
+      listLeadsByBusinessId(context.business!.id, { limit: 5 }),
+      listChatSessionsByBusinessId(context.business!.id, { limit: 5 }),
+    ]),
   );
+  const [overview, recentLeads, recentConversations] = data;
+  const leadsHref = dashboardHref("/dashboard/leads", context.business.id);
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 space-y-8 px-4 py-16">
-      <header className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground/50">Closer</p>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Authenticated area
-          </h1>
-          <p className="text-sm text-foreground/60">
-            This is an authentication smoke test, not the final dashboard.
+    <div className="dashboard-page">
+      <header className="dashboard-page-header">
+        <div>
+          <p className="dashboard-eyebrow">{context.business.name}</p>
+          <h1>Overview</h1>
+          <p className="dashboard-page-intro">
+            A current view of qualified demand and the conversations behind it.
           </p>
         </div>
-
-        <form action={signOut}>
-          <button
-            className="rounded-md border border-foreground/20 px-3 py-2 text-sm"
-            type="submit"
-          >
-            Sign out
-          </button>
-        </form>
+        <div className="dashboard-page-index" aria-label="Current workspace">
+          <span>Workspace</span>
+          <strong>01</strong>
+        </div>
       </header>
 
-      <section className="space-y-3 rounded-xl border border-foreground/10 p-6">
-        <h2 className="font-semibold">Verified identity</h2>
-        <dl className="grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-6">
-          <dt className="text-foreground/50">User ID</dt>
-          <dd className="break-all font-mono">{user.userId}</dd>
-          <dt className="text-foreground/50">Email</dt>
-          <dd>{user.email ?? "Not present in verified claims"}</dd>
-          <dt className="text-foreground/50">Profile</dt>
-          <dd>{user.profile ? "Provisioned" : "Not provisioned"}</dd>
-        </dl>
+      <section className="dashboard-metrics" aria-label="Lead metrics">
+        <MetricCard
+          detail="All qualification records"
+          label="Total leads"
+          value={overview.total}
+        />
+        <MetricCard
+          detail="Awaiting more signals"
+          label="New leads"
+          value={overview.newLeads}
+        />
+        <MetricCard
+          detail="Meets qualification threshold"
+          label="Qualified"
+          value={overview.qualified}
+        />
+        <MetricCard
+          detail="Score of 70 or higher"
+          label="High quality"
+          value={overview.highQuality}
+        />
+        <MetricCard
+          detail="Across scored leads"
+          label="Average score"
+          value={`${overview.averageScore} / 100`}
+        />
       </section>
 
-      <section className="space-y-3 rounded-xl border border-foreground/10 p-6">
-        <h2 className="font-semibold">Business memberships</h2>
-        {membershipDetails.length === 0 ? (
-          <p className="text-sm text-foreground/60">
-            No memberships are assigned yet. Use the development seed with
-            this Auth user ID to associate the seeded businesses.
-          </p>
-        ) : (
-          <ul className="space-y-3 text-sm">
-            {membershipDetails.map(({ membership, business }) => (
-              <li
-                className="rounded-md border border-foreground/10 p-3"
-                key={membership.businessId}
+      <div className="dashboard-overview-grid">
+        <section className="dashboard-panel dashboard-panel-wide">
+          <SectionHeading
+            action={
+              <Link className="text-link" href={leadsHref}>
+                View all leads
+              </Link>
+            }
+            eyebrow="Latest activity"
+            title="Recent leads"
+          />
+          {recentLeads.length === 0 ? (
+            <EmptyState
+              description="New leads will appear here after a visitor shares a qualification signal."
+              title="No leads yet"
+            />
+          ) : (
+            <div className="dashboard-table-wrap">
+              <table className="dashboard-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Contact</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Score</th>
+                    <th scope="col">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentLeads.map((lead) => (
+                    <tr key={lead.id}>
+                      <td>
+                        <Link
+                          className="dashboard-table-primary"
+                          href={dashboardHref(
+                            `/dashboard/leads/${lead.id}`,
+                            context.business!.id,
+                          )}
+                        >
+                          {lead.name || lead.email || "Unnamed lead"}
+                        </Link>
+                        <span className="dashboard-table-secondary">
+                          {lead.company || "Company not provided"}
+                        </span>
+                      </td>
+                      <td>
+                        <StatusPill status={lead.qualificationStatus} />
+                      </td>
+                      <td>
+                        <ScoreDisplay compact score={lead.score} />
+                      </td>
+                      <td className="dashboard-table-secondary">
+                        {formatDashboardDate(lead.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="dashboard-panel">
+          <SectionHeading
+            action={
+              <Link
+                className="text-link"
+                href={dashboardHref(
+                  "/dashboard/conversations",
+                  context.business.id,
+                )}
               >
-                <p className="font-medium">
-                  {business?.name ?? membership.businessId}
-                </p>
-                <p className="text-foreground/60">
-                  {business?.slug ?? "Unknown business"} · {membership.role}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-    </main>
+                View all
+              </Link>
+            }
+            eyebrow="Conversation record"
+            title="Recent conversations"
+          />
+          {recentConversations.length === 0 ? (
+            <EmptyState
+              description="Conversation sessions will appear after visitors begin a chat."
+              title="No conversations yet"
+            />
+          ) : (
+            <ul className="dashboard-list">
+              {recentConversations.map((session) => (
+                <li key={session.id}>
+                  <Link
+                    className="dashboard-list-link"
+                    href={dashboardHref(
+                      `/dashboard/conversations/${session.id}`,
+                      context.business!.id,
+                    )}
+                  >
+                    <span>
+                      <strong>
+                        {session.leadId
+                          ? "Lead conversation"
+                          : "Visitor conversation"}
+                      </strong>
+                      <small>{formatDashboardDate(session.updatedAt)}</small>
+                    </span>
+                    <span className={`session-status session-${session.status}`}>
+                      {session.status}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
   );
 }

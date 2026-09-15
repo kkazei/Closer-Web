@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { leads } from "@/db/schema";
@@ -17,9 +17,11 @@ import {
 } from "./validation";
 import {
   LEAD_STATUSES,
+  LEAD_SORTS,
   type CreateLeadInput,
   type LeadDTO,
   type LeadListOptions,
+  type LeadSort,
   type LeadStatus,
   type UpdateLeadInput,
 } from "./types";
@@ -94,14 +96,30 @@ function normalizeLeadStatus(status: string): LeadStatus {
   return assertEnumValue(status, LEAD_STATUSES, "qualificationStatus");
 }
 
+function normalizeLeadSort(sort: string): LeadSort {
+  return assertEnumValue(sort, LEAD_SORTS, "sort");
+}
+
 function buildLeadConditions(
   businessId: string,
   status: LeadStatus | undefined,
+  search: string | undefined,
 ) {
   const conditions = [eq(leads.businessId, businessId)];
 
   if (status) {
     conditions.push(eq(leads.qualificationStatus, status));
+  }
+
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(
+        ilike(leads.name, pattern),
+        ilike(leads.company, pattern),
+        ilike(leads.email, pattern),
+      )!,
+    );
   }
 
   return conditions;
@@ -138,6 +156,10 @@ export async function listLeadsByBusinessId(
   const normalizedStatus = options.status
     ? normalizeLeadStatus(options.status)
     : undefined;
+  const normalizedSort = options.sort
+    ? normalizeLeadSort(options.sort)
+    : "recent";
+  const normalizedSearch = options.search?.trim().slice(0, 100) || undefined;
   const limit = assertListLimit(options.limit);
   const offset = assertListOffset(options.offset);
 
@@ -145,12 +167,63 @@ export async function listLeadsByBusinessId(
     const rows = await db
       .select(leadSelection)
       .from(leads)
-      .where(and(...buildLeadConditions(normalizedBusinessId, normalizedStatus)))
-      .orderBy(desc(leads.createdAt), desc(leads.id))
+      .where(
+        and(
+          ...buildLeadConditions(
+            normalizedBusinessId,
+            normalizedStatus,
+            normalizedSearch,
+          ),
+        ),
+      )
+      .orderBy(
+        ...(normalizedSort === "score"
+          ? [
+              desc(sql`coalesce(${leads.score}, -1)`),
+              desc(leads.createdAt),
+              desc(leads.id),
+            ]
+          : [desc(leads.createdAt), desc(leads.id)]),
+      )
       .limit(limit)
       .offset(offset);
 
     return rows.map(toLeadDTO);
+  });
+}
+
+export type LeadOverview = Readonly<{
+  total: number;
+  newLeads: number;
+  qualified: number;
+  highQuality: number;
+  averageScore: number;
+}>;
+
+export async function getLeadOverviewByBusinessId(
+  businessId: string,
+): Promise<LeadOverview> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+
+  return withDataAccess("load lead overview", async () => {
+    const [row] = await db
+      .select({
+        total: count(leads.id),
+        newLeads: sql<number>`count(*) filter (where ${leads.qualificationStatus} = 'new')`,
+        qualified: sql<number>`count(*) filter (where ${leads.qualificationStatus} = 'qualified')`,
+        highQuality: sql<number>`count(*) filter (where ${leads.score} >= 70)`,
+        averageScore: sql<number>`coalesce(avg(${leads.score}), 0)`,
+      })
+      .from(leads)
+      .where(eq(leads.businessId, normalizedBusinessId));
+
+    return {
+      total: Number(row?.total ?? 0),
+      newLeads: Number(row?.newLeads ?? 0),
+      qualified: Number(row?.qualified ?? 0),
+      highQuality: Number(row?.highQuality ?? 0),
+      averageScore: Math.round(Number(row?.averageScore ?? 0)),
+    };
   });
 }
 
@@ -256,7 +329,7 @@ export async function countLeadsByBusinessId(
     const [row] = await db
       .select({ count: count() })
       .from(leads)
-      .where(and(...buildLeadConditions(normalizedBusinessId, normalizedStatus)));
+      .where(and(...buildLeadConditions(normalizedBusinessId, normalizedStatus, undefined)));
 
     return Number(row?.count ?? 0);
   });

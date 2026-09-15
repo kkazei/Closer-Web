@@ -97,7 +97,7 @@ Closer uses Supabase Auth with `@supabase/ssr` and cookie-backed sessions. The b
 
 Server-side identity is resolved from Supabase's verified `auth.getClaims()` result, not from client-supplied IDs or an unverified `getSession()` user object. After sign-up, application-level provisioning creates an idempotent `profiles` row using the exact `auth.users.id`. It does not store passwords, access tokens, or refresh tokens. Business access is represented separately through `business_memberships`.
 
-The minimal `/login`, `/signup`, and protected `/dashboard` routes are authentication smoke tests. The dashboard displays the verified user identity and memberships but is not the final dashboard or authorization system. The database security foundation is enforced by PostgreSQL RLS and membership-based policies.
+The `/login`, `/signup`, and protected `/dashboard` routes use the verified identity and membership context. The dashboard is a server-rendered, tenant-scoped workspace for overview metrics, leads, conversations, and knowledge documents. The database security foundation is enforced by PostgreSQL RLS and membership-based policies.
 
 ## RLS and database security
 
@@ -193,17 +193,18 @@ The LLM never writes the trusted score or status. Server-side deterministic code
 calculates a 0-100 score from fit, intent, and readiness signals, stores the
 numeric `score_breakdown`, and derives `qualification_status` and
 `score_explanation`. Tenant-scoped knowledge retrieval is implemented below
-and is now integrated into the anonymous Groq chat boundary. Dashboard
-functionality remains future work.
+and is now integrated into the anonymous Groq chat boundary. The authenticated
+dashboard reads these stored records through the request-scoped RLS DAL.
 
 ## Knowledge ingestion
 
 RAG-001 adds a server-only ingestion operation for plain-text knowledge
-documents. It is not exposed as a public anonymous route or dashboard UI yet.
-An authenticated business owner or admin must provide the business and
+documents. It is not exposed as a public anonymous route. The authenticated
+dashboard provides an owner/admin form that supplies the business and
 document context; the operation verifies that membership in the RLS-aware
 request transaction before using the trusted server database handle for the
-final chunk write. Members can read knowledge but cannot initiate ingestion.
+final chunk write. Members can read knowledge in the dashboard but cannot
+initiate ingestion or archive documents.
 
 The pipeline is:
 
@@ -257,6 +258,28 @@ The anonymous `/api/chat` boundary uses a separate trusted server-only adapter
 only after the session, visitor cookie, business, and expiration have been
 validated. That adapter applies the same explicit tenant filter; it does not
 create an anonymous table policy or expose direct chunk access.
+
+## Business dashboard
+
+The protected dashboard is available at `/dashboard` after sign-in. It supports
+multiple authorized businesses through a server-validated business selector;
+the selected business ID is never treated as proof of access. Every page loads
+its records through `withAuthenticatedDb()` and explicit business-scoped DAL
+queries, with PostgreSQL RLS providing the database-level defense in depth.
+
+Available views:
+
+- `/dashboard` — lead metrics, recent leads, and recent conversations
+- `/dashboard/leads` — status/search/sort filtering and lead detail pages
+- `/dashboard/conversations` — tenant-scoped conversation transcripts
+- `/dashboard/knowledge` — document status, owner/admin plain-text ingestion,
+  and owner/admin archiving
+
+The UI displays stored deterministic lead scores, score breakdowns, and
+explanations. It does not recalculate or trust scores in the browser. Members
+have read-only knowledge access; owners and admins can create and archive
+documents. Re-ingestion is intentionally not exposed because the current
+dashboard does not retain the original source content after submission.
 
 For each chat message, the route retrieves eligible chunks for the validated
 session business, builds a bounded context block, and places it below the
@@ -316,6 +339,6 @@ src/
 > through the narrow public boundary above, and Groq streaming chat now persists
 > user and assistant messages. Structured lead extraction and deterministic lead
 > scoring are now implemented. Plain-text knowledge ingestion and embedding
-> persistence are implemented as the RAG-001 server boundary. Retrieval, RAG
-> answer generation, distributed rate limiting, and the final dashboard remain
-> future work.
+> persistence are implemented as the RAG-001 server boundary. Tenant-scoped
+> retrieval, grounded chat context, and the authenticated business dashboard
+> are implemented. Distributed rate limiting remains future work.

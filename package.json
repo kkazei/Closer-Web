@@ -15,6 +15,7 @@
     "db:test-knowledge-documents-chunks-rls": "node scripts/test-knowledge-documents-chunks-rls.mjs",
     "db:test-rls-security": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rls-security.mjs",
     "db:test-public-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-public-chat-boundary.mjs",
+    "db:test-dashboard-access": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-dashboard-access.mjs",
     "db:test-ai-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-chat-boundary.mjs",
     "test-ai-lead": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-lead-qualification.mjs",
     "db:test-ai-lead": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-ai-lead-pipeline.mjs",

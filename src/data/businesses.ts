@@ -1,10 +1,10 @@
 import "server-only";
 
 import type { InferSelectModel } from "drizzle-orm";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { businesses } from "@/db/schema";
+import { businesses, businessMemberships } from "@/db/schema";
 
 import { withDataAccess } from "./internal";
 import { assertNonBlank, assertUuid } from "./validation";
@@ -60,5 +60,33 @@ export async function getBusinessBySlug(slug: string): Promise<BusinessDTO | nul
       .limit(1);
 
     return row ? toBusinessDTO(row) : null;
+  });
+}
+
+/**
+ * Lists only active businesses that the verified profile belongs to. The
+ * membership join is deliberately part of the DAL query so a caller never
+ * has to treat a client-selected business ID as proof of access.
+ */
+export async function listBusinessesForProfileId(
+  profileId: string,
+): Promise<BusinessDTO[]> {
+  const normalizedProfileId = assertUuid(profileId, "profileId");
+
+  return withDataAccess("list profile businesses", async () => {
+    const rows = await db
+      .select(businessSelection)
+      .from(businesses)
+      .innerJoin(
+        businessMemberships,
+        and(
+          eq(businessMemberships.businessId, businesses.id),
+          eq(businessMemberships.profileId, normalizedProfileId),
+        ),
+      )
+      .where(isNull(businesses.archivedAt))
+      .orderBy(asc(businesses.name), asc(businesses.id));
+
+    return rows.map((business) => toBusinessDTO(business));
   });
 }

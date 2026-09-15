@@ -106,9 +106,14 @@ export type UpdateLeadInput = Partial<CreateLeadInput>;
 
 export type LeadListOptions = {
   status?: LeadStatus;
+  sort?: LeadSort;
+  search?: string;
   limit?: number;
   offset?: number;
 };
+
+export const LEAD_SORTS = ["recent", "score"] as const;
+export type LeadSort = (typeof LEAD_SORTS)[number];
 
 export type ChatSessionDTO = {
   id: string;
