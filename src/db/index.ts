@@ -85,9 +85,9 @@ function assertAuthenticatedUserId(userId: string): string {
 /**
  * Runs user-scoped Drizzle work in an RLS-aware transaction.
  *
- * The caller must pass the user identity returned by the verified Supabase
- * getClaims() flow. The role and JWT settings are transaction-local, so they
- * cannot leak to another pooled connection after commit or rollback.
+ * The caller must pass the user identity returned by the application's
+ * verified custom JWT flow. The role and JWT settings are transaction-local,
+ * so they cannot leak to another pooled connection after commit or rollback.
  */
 export async function withAuthenticatedDb<T>(
   authenticatedUser: AuthenticatedDbUser,

@@ -1,39 +1,46 @@
 import "server-only";
 
-import { getMembershipsForProfile, getProfileById } from "@/data";
-import { assertUuid } from "@/data/validation";
-import { withAuthenticatedDb } from "@/db";
-import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
+import { getMembershipsForProfile, getProfileById } from "@/data";
+import { withAuthenticatedDb } from "@/db";
+
+import { getTokenFromCookies } from "./session";
 import type { AuthenticatedUser } from "./types";
 
-/**
- * Resolves identity only from Supabase's verified JWT claims.
- * A client-supplied user ID is never accepted here.
- */
-export async function getCurrentAuthenticatedUser(): Promise<AuthenticatedUser | null> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getClaims();
-  const claims = data?.claims;
+export async function getAuthenticatedUser(): Promise<AuthenticatedUser | null> {
+  const token = await getTokenFromCookies();
 
-  if (error || !claims || typeof claims.sub !== "string") {
+  if (!token) {
     return null;
   }
 
-  let userId: string;
+  return withAuthenticatedDb({ userId: token.userId }, async () => {
+    const profile = await getProfileById(token.userId);
 
-  try {
-    userId = assertUuid(claims.sub, "authenticated user ID");
-  } catch {
-    return null;
-  }
+    if (!profile) {
+      return null;
+    }
 
-  const email = typeof claims.email === "string" ? claims.email : undefined;
+    const memberships = await getMembershipsForProfile(token.userId);
 
-  return withAuthenticatedDb({ userId }, async () => {
-    const profile = await getProfileById(userId);
-    const memberships = await getMembershipsForProfile(userId);
-
-    return { userId, email, profile, memberships };
+    return {
+      userId: token.userId,
+      email: profile.email ?? token.email,
+      profile,
+      memberships,
+    };
   });
+}
+
+export const getCurrentAuthenticatedUser = getAuthenticatedUser;
+
+export async function requireAuth(): Promise<AuthenticatedUser> {
+  const user = await getAuthenticatedUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  return user;
 }

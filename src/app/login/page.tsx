@@ -4,21 +4,26 @@ import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const next = typeof params.next === "string" ? params.next : undefined;
+
   return (
-    <main className="flex flex-1 items-center justify-center px-4 py-16">
-      <section className="w-full max-w-md space-y-6 rounded-xl border border-foreground/10 p-8">
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-foreground/50">Closer</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
-          <p className="text-sm text-foreground/60">
-            Use your development Supabase Auth account.
-          </p>
+    <main className="auth-page">
+      <section className="auth-card">
+        <div className="auth-heading">
+          <p className="auth-kicker">Closer / Workspace</p>
+          <h1>Sign in</h1>
+          <p>Use your Closer account to access the protected workspace.</p>
         </div>
 
-        <LoginForm />
+        <LoginForm redirectTo={next} />
 
-        <p className="text-center text-sm text-foreground/60">
+        <p className="auth-switch">
           Need an account?{" "}
           <Link className="underline underline-offset-4" href="/signup">
             Create one

@@ -56,15 +56,12 @@ export type MembershipDTO = {
 
 export type ProfileDTO = {
   id: string;
+  email: string | null;
+  emailVerifiedAt: Date | null;
   fullName: string | null;
   avatarUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
-};
-
-export type ProfileProvisioningInput = {
-  fullName?: string | null;
-  avatarUrl?: string | null;
 };
 
 export type LeadDTO = {

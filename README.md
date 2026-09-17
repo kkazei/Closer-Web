@@ -47,17 +47,12 @@ cp .env.example .env.local
 
 Then configure the following variables in `.env.local`:
 
-### Supabase client configuration
-| Variable | Description |
-|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase browser-safe publishable key |
-
 ### Server-only configuration
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | Supabase pooler URL for runtime application queries |
 | `DIRECT_URL` | Supabase direct URL for local migrations and administration |
+| `JWT_SECRET` | Server-only 32+ character secret used to sign session cookies |
 
 ### AI provider configuration
 | Variable | Description |
@@ -74,23 +69,22 @@ Then configure the following variables in `.env.local`:
 Closer deploys as a Next.js App Router application on Vercel. Configure these
 variables in the Vercel `production` and `preview` environments:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `DATABASE_URL`
+- `JWT_SECRET`
 - `GROQ_API_KEY`
 - `HF_TOKEN`
 
-The two `NEXT_PUBLIC_` values are intentionally browser-safe. `DATABASE_URL`,
-`GROQ_API_KEY`, and `HF_TOKEN` are server-only secrets. `DIRECT_URL` is used by
+`DATABASE_URL`, `JWT_SECRET`, `GROQ_API_KEY`, and `HF_TOKEN` are server-only
+secrets. `DIRECT_URL` is used by
 Drizzle migrations and should remain an operator/local variable rather than a
 normal runtime deployment variable. Development seed controls are not
 configured in production.
 
 For a linked Vercel project, pull development values locally with
 `vercel env pull .env.local --environment=development` and deploy with
-`vercel --prod`. Keep `.env.local` out of version control. Set the Supabase
-Auth Site URL to the deployed production origin; the current password flow
-redirects to `/dashboard` and does not use a custom OAuth callback route.
+`vercel --prod`. Keep `.env.local` out of version control. Set `JWT_SECRET` to
+a different strong random value in each deployed environment. The password
+flow redirects to `/dashboard` and does not use an OAuth callback route.
 
 ## Testing
 
@@ -100,8 +94,8 @@ Closer uses two complementary test layers:
   deterministic qualification/scoring, input validation, chunking, RAG context
   construction, and embedding-provider behavior. Run it with `npm run test`.
 - Database and provider boundary scripts remain the authoritative integration
-  tests. They exercise real PostgreSQL RLS, tenant filtering, Supabase Auth
-  identity context, pgvector retrieval, anonymous chat ownership, and the
+  tests. They exercise real PostgreSQL RLS, tenant filtering, database claim
+  context, pgvector retrieval, anonymous chat ownership, and the
   Groq/Hugging Face boundaries without replacing them with mocks.
 
 The deterministic RAG evaluation set covers relevant and irrelevant questions,
@@ -130,7 +124,7 @@ its cleanup/rollback boundary.
 
 ## Development seed
 
-After applying the initial migration, the development-only seed can be run with an explicit confirmation:
+After applying all migrations, including `0006_custom-authentication.sql`, the development-only seed can be run with an explicit confirmation:
 
 ```bash
 CLOSER_SEED_MODE=development npm run db:seed -- --confirm-development
@@ -143,34 +137,46 @@ $env:CLOSER_SEED_MODE = "development"
 npm run db:seed -- --confirm-development
 ```
 
-The seed uses `DIRECT_URL`, upserts deterministic demo records, and can be run repeatedly. It refuses to run when `NODE_ENV=production`, when the explicit development confirmation is missing, or before a Drizzle migration has been applied. It never creates Supabase Auth users or passwords.
+The seed uses `DIRECT_URL`, upserts deterministic demo records, and can be run repeatedly. It refuses to run when `NODE_ENV=production`, when the explicit development confirmation is missing, or before a Drizzle migration has been applied. It never creates passwords or sessions.
 
-To associate the demo data with an existing Supabase Auth user, provide that user's UUID without exposing a password or service credential:
+To associate the demo data with an existing custom-auth profile, provide that profile's UUID without exposing a password or session credential:
 
 ```powershell
-$env:CLOSER_SEED_AUTH_USER_ID = "existing-auth-user-uuid"
+$env:CLOSER_SEED_USER_ID = "existing-profile-uuid"
 $env:CLOSER_SEED_MODE = "development"
 npm run db:seed -- --confirm-development
 ```
 
-Without `CLOSER_SEED_AUTH_USER_ID`, the seed skips `profiles` and `business_memberships` because `profiles.id` must reference a real `auth.users.id`.
+Without `CLOSER_SEED_USER_ID`, the seed skips `profiles` and `business_memberships`.
 
 ## Authentication
 
-Closer uses Supabase Auth with `@supabase/ssr` and cookie-backed sessions. The browser client in `src/lib/supabase/client.ts` uses only the public Supabase URL and publishable key. The server client in `src/lib/supabase/server.ts` reads and writes SSR cookies, while `src/proxy.ts` refreshes sessions before requests reach the application.
+Closer uses application-managed authentication with bcryptjs, jose, and an
+HTTP-only `closer_session` cookie. Supabase/Postgres remains the database, but
+Supabase Auth is not used by registration, login, logout, or route protection.
 
-Server-side identity is resolved from Supabase's verified `auth.getClaims()` result, not from client-supplied IDs or an unverified `getSession()` user object. After sign-up, application-level provisioning creates an idempotent `profiles` row using the exact `auth.users.id`. It does not store passwords, access tokens, or refresh tokens. Business access is represented separately through `business_memberships`.
+Registration validates input on the server, hashes the password with bcryptjs,
+creates the account in `profiles`, and signs a seven-day JWT with `JWT_SECRET`.
+Login compares the supplied password against the stored hash and returns the
+same generic error for unknown emails and incorrect passwords. The JWT contains
+only the profile ID and email, and is never exposed to client-side JavaScript.
+The account's `email_verified_at` field starts empty; the UI identifies the
+pending state and does not pretend to send an email.
 
-The `/login`, `/signup`, and protected `/dashboard` routes use the verified identity and membership context. The dashboard is a server-rendered, tenant-scoped workspace for overview metrics, leads, conversations, and knowledge documents. The database security foundation is enforced by PostgreSQL RLS and membership-based policies.
+The `/login`, `/signup`, `/account/verification`, and protected `/dashboard`
+routes use the server-verified identity and membership context. The dashboard
+is a server-rendered, tenant-scoped workspace for overview metrics, leads,
+conversations, and knowledge documents. The database security foundation is
+enforced by PostgreSQL RLS and membership-based policies.
 
 ## RLS and database security
 
 Authenticated application access follows this path:
 
 ```text
-Supabase Auth
+Application JWT
       ↓
-Verified getClaims() claims
+Server-side jwtVerify() claims
       ↓
 withAuthenticatedDb()
       ↓
@@ -185,9 +191,9 @@ Tenant-owned data
 
 The normal `db` handle used by the DAL is request-scoped and fails closed
 outside `withAuthenticatedDb()`. The `privilegedDb` handle uses the trusted
-server connection and is reserved for administrative operations, migrations,
-development seed data, and explicit Auth profile provisioning. It must not be
-used for ordinary user authorization.
+server connection and is reserved for authentication account lookups,
+migrations, development seed data, and other explicit administrative
+operations. It must not be used for ordinary user authorization.
 
 RLS is enabled on `businesses`, `profiles`, `business_memberships`, `leads`,
 `chat_sessions`, `messages`, `knowledge_documents`, and `document_chunks`.
@@ -397,7 +403,7 @@ src/
 
 ## Current Status
 
-> **Current foundation status:** Supabase authentication, the typed DAL, the
+> **Current foundation status:** Custom JWT authentication, the typed DAL, the
 > request-scoped RLS database context, tenant isolation, and the RLS security
 > regression suite are implemented. Anonymous session creation is now available
 > through the narrow public boundary above, and Groq streaming chat now persists

@@ -5,55 +5,67 @@ import { useActionState } from "react";
 import { signIn } from "@/app/auth/actions";
 import { initialAuthActionState } from "@/lib/auth/action-state";
 
-export function LoginForm() {
+export function LoginForm({ redirectTo }: Readonly<{ redirectTo?: string }>) {
   const [state, formAction, pending] = useActionState(
     signIn,
     initialAuthActionState,
   );
+  const emailError = state.fieldErrors?.email;
+  const passwordError = state.fieldErrors?.password;
 
   return (
-    <form action={formAction} className="space-y-4">
-      <label className="block space-y-2 text-sm">
-        <span className="font-medium">Email</span>
+    <form action={formAction} className="auth-form">
+      {redirectTo ? <input name="next" type="hidden" value={redirectTo} /> : null}
+      <label className="auth-field" htmlFor="login-email">
+        <span>Email</span>
         <input
+          aria-describedby={emailError ? "login-email-error" : undefined}
+          aria-invalid={Boolean(emailError)}
           autoComplete="email"
-          className="w-full rounded-md border border-foreground/20 bg-transparent px-3 py-2"
+          id="login-email"
           name="email"
           required
           type="email"
         />
+        {emailError ? (
+          <small className="auth-field-error" id="login-email-error">
+            {emailError}
+          </small>
+        ) : null}
       </label>
 
-      <label className="block space-y-2 text-sm">
-        <span className="font-medium">Password</span>
+      <label className="auth-field" htmlFor="login-password">
+        <span>Password</span>
         <input
+          aria-describedby={passwordError ? "login-password-error" : undefined}
+          aria-invalid={Boolean(passwordError)}
           autoComplete="current-password"
-          className="w-full rounded-md border border-foreground/20 bg-transparent px-3 py-2"
-          minLength={8}
+          id="login-password"
           name="password"
           required
           type="password"
         />
+        {passwordError ? (
+          <small className="auth-field-error" id="login-password-error">
+            {passwordError}
+          </small>
+        ) : null}
       </label>
 
       {state.error ? (
-        <p aria-live="polite" className="text-sm text-red-600">
+        <p aria-live="polite" className="auth-feedback auth-feedback-error">
           {state.error}
         </p>
       ) : null}
 
       {state.message ? (
-        <p aria-live="polite" className="text-sm text-green-600">
+        <p aria-live="polite" className="auth-feedback auth-feedback-success">
           {state.message}
         </p>
       ) : null}
 
-      <button
-        className="w-full rounded-md bg-foreground px-4 py-2 text-background disabled:opacity-50"
-        disabled={pending}
-        type="submit"
-      >
-        {pending ? "Signing in…" : "Sign in"}
+      <button className="button button-primary auth-submit" disabled={pending} type="submit">
+        {pending ? "Signing in..." : "Sign in"}
       </button>
     </form>
   );

@@ -261,6 +261,10 @@ async function runTests() {
   } finally {
     for (const user of users) {
       await direct`
+        delete from public.profiles
+        where id = ${user.id}::uuid
+      `;
+      await direct`
         delete from auth.users
         where id = ${user.id}::uuid
       `;

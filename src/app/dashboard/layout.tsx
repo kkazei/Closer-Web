@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { signOut } from "@/app/auth/actions";
 import { DashboardShell } from "./_components/dashboard-shell";
+import { VerificationReminder } from "./_components/verification-reminder";
 import { getDashboardContext } from "./_lib";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,11 @@ export default async function DashboardLayout({
         </form>
       }
       businesses={context.businesses}
+      emailVerified={Boolean(context.user.profile?.emailVerifiedAt)}
       userLabel={userLabel}
+      verificationReminder={
+        context.user.profile?.emailVerifiedAt ? null : <VerificationReminder />
+      }
     >
       {children}
     </DashboardShell>

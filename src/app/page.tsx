@@ -4,6 +4,7 @@ import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
 
 const STACK_ITEMS = [
   "Next.js App Router",
+  "Custom JWT authentication",
   "Supabase / PostgreSQL",
   "Drizzle ORM",
   "Groq",

@@ -1348,3 +1348,251 @@ textarea:focus-visible {
     flex-direction: column;
   }
 }
+
+.auth-page {
+  align-items: center;
+  background-color: var(--soft);
+  background-image: linear-gradient(
+      to right,
+      rgba(17, 17, 17, 0.045) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, rgba(17, 17, 17, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
+  display: grid;
+  min-height: 100vh;
+  padding: 56px 24px;
+}
+
+.auth-card {
+  background: #fff;
+  border: 1px solid var(--foreground);
+  border-top: 6px solid var(--accent);
+  margin: 0 auto;
+  max-width: 460px;
+  padding: clamp(28px, 5vw, 52px);
+  width: 100%;
+}
+
+.auth-heading {
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+}
+
+.auth-kicker,
+.auth-field > span,
+.account-status-details dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.auth-kicker {
+  color: var(--accent);
+  margin: 0 0 16px;
+}
+
+.auth-heading h1 {
+  font-size: clamp(38px, 7vw, 64px);
+  letter-spacing: -0.08em;
+  line-height: 0.9;
+  margin: 0;
+}
+
+.auth-heading > p:last-child {
+  color: var(--muted);
+  font-size: 15px;
+  margin: 18px 0 0;
+  max-width: 350px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 18px;
+}
+
+.auth-field {
+  display: grid;
+  gap: 7px;
+}
+
+.auth-field em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.auth-field input {
+  background: #fff;
+  border: 1px solid var(--foreground);
+  border-radius: 0;
+  min-height: 46px;
+  padding: 10px 12px;
+}
+
+.auth-field input[aria-invalid="true"] {
+  border-color: var(--accent);
+}
+
+.auth-field > small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.auth-field .auth-field-error {
+  color: var(--accent);
+}
+
+.auth-feedback {
+  border-left: 2px solid var(--accent);
+  font-size: 13px;
+  margin: 0;
+  padding: 8px 0 8px 12px;
+}
+
+.auth-feedback-success {
+  border-color: #2d7a46;
+  color: #2d7a46;
+}
+
+.auth-submit {
+  margin-top: 4px;
+  min-height: 48px;
+  width: 100%;
+}
+
+.auth-switch {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 24px 0 0;
+  text-align: center;
+}
+
+.auth-switch a {
+  color: var(--foreground);
+  font-weight: 700;
+  text-underline-offset: 4px;
+}
+
+.auth-notice {
+  background: var(--soft);
+  border-left: 2px solid var(--accent);
+  margin-bottom: 26px;
+  padding: 14px 16px;
+}
+
+.auth-notice strong {
+  font-size: 14px;
+}
+
+.auth-notice p {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+.account-status-card {
+  max-width: 560px;
+}
+
+.account-status-details {
+  display: grid;
+  gap: 16px;
+  margin: 0 0 28px;
+}
+
+.account-status-details > div {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.account-status-details dt {
+  margin-bottom: 4px;
+}
+
+.account-status-details dd {
+  font-size: 15px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.verification-reminder {
+  align-items: center;
+  background: var(--soft);
+  border-bottom: 1px solid var(--foreground);
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 18px clamp(24px, 4vw, 64px);
+}
+
+.verification-reminder-label {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.verification-reminder strong {
+  display: block;
+  font-size: 15px;
+}
+
+.verification-reminder p:not(.verification-reminder-label) {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 4px 0 0;
+  max-width: 650px;
+}
+
+.verification-reminder-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.dashboard-verification-status {
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 5px 7px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .auth-page {
+    padding: 24px 16px;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
+  }
+
+  .verification-reminder {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+    padding: 18px 16px;
+  }
+
+  .verification-reminder-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .verification-reminder-actions .button {
+    width: 100%;
+  }
+}

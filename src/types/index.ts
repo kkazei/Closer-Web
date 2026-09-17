@@ -19,7 +19,6 @@ export interface ApiResponse<T> {
  * Used to validate required environment variables at startup.
  */
 export interface AppConfig {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   databaseUrl: string;
+  jwtSecret: string;
 }

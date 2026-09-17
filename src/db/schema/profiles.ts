@@ -1,24 +1,24 @@
+import { sql } from "drizzle-orm";
 import {
-  foreignKey,
-  pgSchema,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-
-// Supabase owns auth.users. This local declaration lets Drizzle represent the
-// cross-schema foreign key without recreating the authentication table.
-const auth = pgSchema("auth");
-const authUsers = auth.table("users", {
-  id: uuid("id").primaryKey(),
-});
 
 export const profiles = pgTable(
   "profiles",
   {
-    // This UUID must match auth.users.id.
-    id: uuid("id").primaryKey(),
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    // These fields are nullable for backwards compatibility with profiles
+    // created before the custom authentication migration. New registrations
+    // always provide both values.
+    email: text("email"),
+    passwordHash: text("password_hash"),
+    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
     fullName: text("full_name"),
     avatarUrl: text("avatar_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -29,10 +29,6 @@ export const profiles = pgTable(
       .notNull(),
   },
   (table) => [
-    foreignKey({
-      columns: [table.id],
-      foreignColumns: [authUsers.id],
-      name: "profiles_id_auth_users_id_fk",
-    }).onDelete("cascade"),
+    uniqueIndex("profiles_email_unique").on(sql`lower(${table.email})`),
   ],
 );

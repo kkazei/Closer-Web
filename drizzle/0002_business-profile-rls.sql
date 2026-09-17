@@ -42,7 +42,7 @@ GRANT UPDATE (name, slug, archived_at)
   TO authenticated;--> statement-breakpoint
 
 -- Profiles are self-service records only. The id is both the profile primary
--- key and auth.users.id, so clients may insert only their own id and may not
+-- key and the authenticated profile ID, so clients may insert only their own id and may not
 -- update it. Auth cascade remains responsible for deletion.
 CREATE POLICY profiles_select_self
   ON public.profiles

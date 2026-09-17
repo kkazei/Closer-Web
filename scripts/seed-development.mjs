@@ -17,12 +17,12 @@ if (args.has("--help")) {
 
   CLOSER_SEED_MODE=development npm run db:seed -- --confirm-development
 
-Optional existing Supabase Auth profile:
+Optional existing custom authentication profile:
 
-  CLOSER_SEED_AUTH_USER_ID=<existing auth.users UUID> \
+  CLOSER_SEED_USER_ID=<profile UUID> \
     CLOSER_SEED_MODE=development npm run db:seed -- --confirm-development
 
-The seed never creates Auth users or passwords. The migration must already be
+The seed never creates passwords or sessions. The migration must already be
 applied, and production mode is rejected.`);
   process.exit(0);
 }
@@ -49,12 +49,12 @@ if (!directUrl) {
   throw new Error("DIRECT_URL is not configured.");
 }
 
-const authUserId = process.env.CLOSER_SEED_AUTH_USER_ID;
+const seedUserId = process.env.CLOSER_SEED_USER_ID;
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-if (authUserId && !uuidPattern.test(authUserId)) {
-  throw new Error("CLOSER_SEED_AUTH_USER_ID must be a valid UUID.");
+if (seedUserId && !uuidPattern.test(seedUserId)) {
+  throw new Error("CLOSER_SEED_USER_ID must be a valid UUID.");
 }
 
 const seedIds = {
@@ -396,36 +396,24 @@ async function seedDatabase(tx) {
 
   let profileSeeded = false;
 
-  if (authUserId) {
-    const authUser = await tx`
-      select id from auth.users where id = ${authUserId}::uuid
-    `;
-
-    if (!authUser[0]) {
-      throw new Error(
-        "CLOSER_SEED_AUTH_USER_ID does not match an existing auth.users row.",
-      );
-    }
-
+  if (seedUserId) {
     await tx`
       insert into profiles (id, full_name, avatar_url, created_at, updated_at)
       values (
-        ${authUserId}::uuid,
+        ${seedUserId}::uuid,
         ${"Closer Demo Owner"},
         ${null},
         ${seedTimestamps.first},
         ${seedTimestamps.latest}
       )
       on conflict (id) do update set
-        full_name = excluded.full_name,
-        avatar_url = excluded.avatar_url,
         updated_at = excluded.updated_at
     `;
 
     for (const business of businesses) {
       await tx`
         insert into business_memberships (business_id, profile_id, role, created_at)
-        values (${business.id}::uuid, ${authUserId}::uuid, ${"owner"}, ${business.createdAt})
+        values (${business.id}::uuid, ${seedUserId}::uuid, ${"owner"}, ${business.createdAt})
         on conflict (business_id, profile_id) do update set
           role = excluded.role
       `;
@@ -554,7 +542,7 @@ async function seedDatabase(tx) {
       values (
         ${document.id}::uuid,
         ${document.businessId}::uuid,
-        ${authUserId ? authUserId : null}::uuid,
+        ${seedUserId ? seedUserId : null}::uuid,
         ${document.name},
         ${document.documentType},
         ${document.sourceUri},
@@ -623,10 +611,10 @@ try {
   console.log(`Document chunks upserted: ${chunks.length}`);
 
   if (result.profileSeeded) {
-    console.log("Existing Auth user profile and memberships upserted.");
+    console.log("Custom auth profile and memberships upserted.");
   } else {
     console.log(
-      "No Auth profile seeded. Set CLOSER_SEED_AUTH_USER_ID to an existing auth.users UUID to add one.",
+      "No auth profile seeded. Set CLOSER_SEED_USER_ID to add one.",
     );
   }
 } catch (error) {

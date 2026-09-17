@@ -13,7 +13,9 @@ type DashboardBusinessOption = Readonly<{
 type DashboardShellProps = Readonly<{
   businesses: DashboardBusinessOption[];
   userLabel: string;
+  emailVerified: boolean;
   accountMenu: ReactNode;
+  verificationReminder: ReactNode;
   children: ReactNode;
 }>;
 
@@ -36,7 +38,9 @@ function buildPath(
 export function DashboardShell({
   businesses,
   userLabel,
+  emailVerified,
   accountMenu,
+  verificationReminder,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -86,6 +90,11 @@ export function DashboardShell({
           )}
           <div className="dashboard-account">
             <span className="dashboard-account-name">{userLabel}</span>
+            {!emailVerified ? (
+              <span className="dashboard-verification-status">
+                Email not verified
+              </span>
+            ) : null}
             {accountMenu}
           </div>
         </div>
@@ -116,11 +125,14 @@ export function DashboardShell({
 
           <div className="dashboard-sidebar-foot">
             <p>Protected workspace</p>
-            <span>Supabase Auth · RLS</span>
+            <span>Custom session / RLS</span>
           </div>
         </aside>
 
-        <main className="dashboard-content">{children}</main>
+        <main className="dashboard-content">
+          {verificationReminder}
+          {children}
+        </main>
       </div>
     </div>
   );
