@@ -3,10 +3,8 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 
-import {
-  createKnowledgeDocumentAction,
-  initialDashboardActionState,
-} from "../actions";
+import { createKnowledgeDocumentAction } from "../actions";
+import { initialDashboardActionState } from "../action-state";
 
 function SubmitButton() {
   const { pending } = useFormStatus();

@@ -137,17 +137,17 @@ export async function listKnowledgeDocumentsByBusinessId(
   });
 }
 
-export async function createKnowledgeDocument(
+function buildKnowledgeDocumentInsertValues(
   businessId: string,
   input: CreateKnowledgeDocumentInput,
-): Promise<KnowledgeDocumentDTO> {
-  const normalizedBusinessId = assertUuid(businessId, "businessId");
+): InferInsertModel<typeof knowledgeDocuments> {
   const normalizedCreatedByProfileId = assertOptionalUuid(
     input.createdByProfileId,
     "createdByProfileId",
   );
-  const values: InferInsertModel<typeof knowledgeDocuments> = {
-    businessId: normalizedBusinessId,
+
+  return {
+    businessId,
     createdByProfileId: normalizedCreatedByProfileId ?? null,
     name: assertNonBlank(input.name, "name"),
     documentType: assertNonBlank(input.documentType, "documentType"),
@@ -157,9 +157,51 @@ export async function createKnowledgeDocument(
       ? assertJsonObject(input.metadata, "metadata")
       : {},
   };
+}
+
+export async function createKnowledgeDocument(
+  businessId: string,
+  input: CreateKnowledgeDocumentInput,
+): Promise<KnowledgeDocumentDTO> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+  const values = buildKnowledgeDocumentInsertValues(
+    normalizedBusinessId,
+    input,
+  );
 
   return withDataAccess("create knowledge document", async () => {
     const [row] = await db
+      .insert(knowledgeDocuments)
+      .values(values)
+      .returning(knowledgeDocumentSelection);
+
+    if (!row) {
+      throw new Error("The knowledge document was not created.");
+    }
+
+    return toKnowledgeDocumentDTO(row);
+  });
+}
+
+/**
+ * Creates a document through the trusted server-side connection.
+ *
+ * The authenticated role intentionally has no direct INSERT grant for
+ * knowledge_documents. Callers must complete their membership/role check in
+ * an RLS-aware context before crossing this explicit privileged boundary.
+ */
+export async function createKnowledgeDocumentPrivileged(
+  businessId: string,
+  input: CreateKnowledgeDocumentInput,
+): Promise<KnowledgeDocumentDTO> {
+  const normalizedBusinessId = assertUuid(businessId, "businessId");
+  const values = buildKnowledgeDocumentInsertValues(
+    normalizedBusinessId,
+    input,
+  );
+
+  return withDataAccess("create knowledge document", async () => {
+    const [row] = await privilegedDb
       .insert(knowledgeDocuments)
       .values(values)
       .returning(knowledgeDocumentSelection);

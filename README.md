@@ -2,6 +2,8 @@
 
 AI-powered sales assistant that qualifies leads through intelligent conversation. Closer answers product questions using RAG, conversationally qualifies website visitors, extracts structured lead information, calculates deterministic lead scores, and provides a business dashboard.
 
+**Live demo:** [closer-ten-alpha.vercel.app](https://closer-ten-alpha.vercel.app)
+
 ## Tech Stack
 
 - **Framework:** Next.js (App Router)
@@ -54,9 +56,8 @@ Then configure the following variables in `.env.local`:
 ### Server-only configuration
 | Variable | Description |
 |---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (admin access) |
 | `DATABASE_URL` | Supabase pooler URL for runtime application queries |
-| `DIRECT_URL` | Supabase direct URL for migrations and administration |
+| `DIRECT_URL` | Supabase direct URL for local migrations and administration |
 
 ### AI provider configuration
 | Variable | Description |
@@ -67,6 +68,29 @@ Then configure the following variables in `.env.local`:
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
 
 `npm run db:check` performs a read-only `SELECT 1` against both `DATABASE_URL` and `DIRECT_URL`. It does not generate, apply, or inspect migrations. The command requires both variables to contain valid connection strings.
+
+## Deployment
+
+Closer deploys as a Next.js App Router application on Vercel. Configure these
+variables in the Vercel `production` and `preview` environments:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `DATABASE_URL`
+- `GROQ_API_KEY`
+- `HF_TOKEN`
+
+The two `NEXT_PUBLIC_` values are intentionally browser-safe. `DATABASE_URL`,
+`GROQ_API_KEY`, and `HF_TOKEN` are server-only secrets. `DIRECT_URL` is used by
+Drizzle migrations and should remain an operator/local variable rather than a
+normal runtime deployment variable. Development seed controls are not
+configured in production.
+
+For a linked Vercel project, pull development values locally with
+`vercel env pull .env.local --environment=development` and deploy with
+`vercel --prod`. Keep `.env.local` out of version control. Set the Supabase
+Auth Site URL to the deployed production origin; the current password flow
+redirects to `/dashboard` and does not use a custom OAuth callback route.
 
 ## Testing
 

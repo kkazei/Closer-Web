@@ -7,22 +7,14 @@ import { redirect } from "next/navigation";
 
 import {
   archiveKnowledgeDocument,
-  createKnowledgeDocument,
+  createKnowledgeDocumentPrivileged,
   getMembership,
 } from "@/data";
 import { ingestKnowledgeDocument } from "@/rag/ingestion";
 import { withAuthenticatedDb } from "@/db";
 import { getCurrentAuthenticatedUser } from "@/lib/auth/context";
 
-export type DashboardActionState = Readonly<{
-  error: string | null;
-  message: string | null;
-}>;
-
-export const initialDashboardActionState: DashboardActionState = {
-  error: null,
-  message: null,
-};
+import type { DashboardActionState } from "./action-state";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -78,7 +70,7 @@ export async function createKnowledgeDocumentAction(
   let documentId: string;
 
   try {
-    const document = await withAuthenticatedDb(
+    await withAuthenticatedDb(
       { userId: user.userId },
       async () => {
         const membership = await getMembership(businessId, user.userId);
@@ -86,14 +78,17 @@ export async function createKnowledgeDocumentAction(
         if (!membership || !isManager(membership.role)) {
           throw new Error("FORBIDDEN");
         }
-
-        return createKnowledgeDocument(businessId, {
-          createdByProfileId: user.userId,
-          name,
-          documentType,
-        });
       },
     );
+
+    // The authenticated role is deliberately denied direct INSERT on
+    // knowledge_documents. Authorization is completed above in the
+    // request-scoped RLS transaction before using this trusted write path.
+    const document = await createKnowledgeDocumentPrivileged(businessId, {
+      createdByProfileId: user.userId,
+      name,
+      documentType,
+    });
     documentId = document.id;
   } catch (error) {
     if (error instanceof Error && error.message === "FORBIDDEN") {
