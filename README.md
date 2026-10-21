@@ -60,6 +60,12 @@ Then configure the following variables in `.env.local`:
 | `GROQ_API_KEY` | Server-only Groq API key for chat generation |
 | `HF_TOKEN` | Server-only Hugging Face token with Inference Providers permission |
 
+### Development-only seed configuration
+| Variable | Description |
+|---|---|
+| `CLOSER_SEED_MODE` | Set to `development` only when running the development seed |
+| `CLOSER_SEED_USER_ID` | Existing profile UUID to associate with seeded records and use for the RLS-scoped RAG evaluation |
+
 > **Note:** Server-only secrets must never be prefixed with `NEXT_PUBLIC_` and must never be imported in client components.
 
 `npm run db:check` performs a read-only `SELECT 1` against both `DATABASE_URL` and `DIRECT_URL`. It does not generate, apply, or inspect migrations. The command requires both variables to contain valid connection strings.
@@ -118,6 +124,15 @@ npm run db:test-rag-retrieval
 npm run db:test-rag-chat
 npm run db:test-rag-chat-live
 ```
+
+`npm run db:eval-rag` runs a read-only retrieval evaluation against the seeded
+Northstar Labs knowledge base. It requires `DATABASE_URL`, `HF_TOKEN`, and
+`CLOSER_SEED_USER_ID` set to the profile UUID that owns the seeded business.
+It uses the real embedding provider and runs the production retrieval
+primitive inside the authenticated RLS transaction. The seeded chunks must have
+embeddings from the configured model; the seed script creates placeholder
+chunks without embeddings. The evaluation writes its metrics and
+recommendation to `docs/rag-eval-results.md`.
 
 No test writes credentials, embeddings, or fixture data that persists after
 its cleanup/rollback boundary.

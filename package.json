@@ -29,6 +29,7 @@
     "test-rag-context": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rag-context.mjs",
     "db:test-rag-chat": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rag-chat-integration.mjs",
     "db:test-rag-chat-live": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/test-rag-chat-live.mjs",
+    "db:eval-rag": "node --experimental-strip-types --experimental-loader ./scripts/ts-loader.mjs scripts/rag-eval.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
