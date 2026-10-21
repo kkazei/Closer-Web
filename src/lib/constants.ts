@@ -5,4 +5,4 @@
 export const APP_NAME = "Closer" as const;
 
 export const APP_DESCRIPTION =
-  "AI-powered sales assistant that qualifies leads through intelligent conversation." as const;
+  "Answer visitor questions from your business knowledge and turn conversations into qualified leads." as const;

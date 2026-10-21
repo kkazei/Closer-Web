@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import type { LeadStatus } from "@/data";
+import { BusinessCreateForm } from "./business-create-form";
 
 export function formatDashboardDate(value: Date): string {
   return new Intl.DateTimeFormat("en", {
@@ -117,9 +118,10 @@ export function NoBusinessState() {
       <p className="dashboard-eyebrow">Business access</p>
       <h1>No business workspace yet</h1>
       <p>
-        Your account is authenticated, but it is not a member of an active
-        business. Ask an owner to add your profile before using the dashboard.
+        Your account is ready. Create a business workspace to start using the
+        dashboard.
       </p>
+      <BusinessCreateForm />
     </div>
   );
 }

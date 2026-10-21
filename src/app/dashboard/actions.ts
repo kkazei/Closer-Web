@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 
 import {
   archiveKnowledgeDocument,
+  createBusinessForOwner,
   createKnowledgeDocumentPrivileged,
   getMembership,
 } from "@/data";
@@ -20,6 +21,7 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_DOCUMENT_NAME_LENGTH = 200;
 const MAX_DOCUMENT_CHARACTERS = 100_000;
+const MAX_BUSINESS_NAME_LENGTH = 100;
 
 function readText(formData: FormData, fieldName: string): string {
   const value = formData.get(fieldName);
@@ -32,6 +34,37 @@ function actionError(message: string): DashboardActionState {
 
 function isManager(role: string): boolean {
   return role === "owner" || role === "admin";
+}
+
+export async function createBusinessAction(
+  _previousState: DashboardActionState,
+  formData: FormData,
+): Promise<DashboardActionState> {
+  const name = readText(formData, "businessName");
+
+  if (name.length === 0 || name.length > MAX_BUSINESS_NAME_LENGTH) {
+    return actionError("Enter a business name under 100 characters.");
+  }
+
+  const user = await getCurrentAuthenticatedUser();
+
+  if (!user) {
+    return actionError("Your session has expired. Sign in again.");
+  }
+
+  let businessId: string;
+
+  try {
+    // Identity comes from the verified session; never accept an owner ID from
+    // form data. The DAL creates the business and owner membership atomically.
+    const business = await createBusinessForOwner(name, user.userId);
+    businessId = business.id;
+  } catch {
+    return actionError("The business workspace could not be created.");
+  }
+
+  revalidatePath("/dashboard");
+  redirect(`/dashboard?business=${encodeURIComponent(businessId)}`);
 }
 
 export async function createKnowledgeDocumentAction(
@@ -105,10 +138,15 @@ export async function createKnowledgeDocumentAction(
       documentId,
       content,
     });
-  } catch {
+  } catch (error) {
     revalidatePath("/dashboard/knowledge");
     return actionError(
-      "The document was created, but ingestion failed. Review its status before trying again.",
+      error instanceof Error &&
+        error.message.startsWith(
+          "Hugging Face Inference Providers has no remaining credits.",
+        )
+        ? `${error.message} The document is marked failed; submit it again after adding credits.`
+        : "The document was created, but ingestion failed. Review its status before trying again.",
     );
   }
 

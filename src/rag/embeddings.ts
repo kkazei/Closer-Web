@@ -1,9 +1,13 @@
 import "server-only";
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type { EmbeddingProvider } from "./types";
 
 export const EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2" as const;
 export const EMBEDDING_DIMENSIONS = 384 as const;
+const LOCAL_TRANSFORMERS_MODEL = "Xenova/all-MiniLM-L6-v2" as const;
 export const HUGGING_FACE_FEATURE_EXTRACTION_ENDPOINT =
   "https://router.huggingface.co/hf-inference/models" as const;
 
@@ -11,6 +15,7 @@ type EmbeddingErrorCode =
   | "CONFIGURATION"
   | "INVALID_INPUT"
   | "AUTHENTICATION"
+  | "INSUFFICIENT_CREDITS"
   | "RATE_LIMITED"
   | "UNAVAILABLE"
   | "INVALID_RESPONSE"
@@ -19,16 +24,19 @@ type EmbeddingErrorCode =
 export class EmbeddingProviderError extends Error {
   readonly code: EmbeddingErrorCode;
   readonly retryable: boolean;
+  readonly httpStatus?: number;
 
   constructor(
     code: EmbeddingErrorCode,
     message: string,
     retryable = false,
+    httpStatus?: number,
   ) {
     super(message);
     this.name = "EmbeddingProviderError";
     this.code = code;
     this.retryable = retryable;
+    this.httpStatus = httpStatus;
   }
 }
 
@@ -137,6 +145,17 @@ function providerErrorForStatus(status: number): EmbeddingProviderError {
     return new EmbeddingProviderError(
       "AUTHENTICATION",
       "Hugging Face rejected the embedding request credentials.",
+      false,
+      status,
+    );
+  }
+
+  if (status === 402) {
+    return new EmbeddingProviderError(
+      "INSUFFICIENT_CREDITS",
+      "Hugging Face Inference Providers has no remaining credits.",
+      false,
+      status,
     );
   }
 
@@ -145,6 +164,7 @@ function providerErrorForStatus(status: number): EmbeddingProviderError {
       "RATE_LIMITED",
       "Hugging Face rate-limited the embedding request.",
       true,
+      status,
     );
   }
 
@@ -153,12 +173,15 @@ function providerErrorForStatus(status: number): EmbeddingProviderError {
       "UNAVAILABLE",
       "Hugging Face is temporarily unavailable for embeddings.",
       true,
+      status,
     );
   }
 
   return new EmbeddingProviderError(
     "REQUEST_FAILED",
     "Hugging Face rejected the embedding request.",
+    false,
+    status,
   );
 }
 
@@ -289,4 +312,70 @@ export function createHuggingFaceEmbeddingProvider(
 
 export function getHuggingFaceEmbeddingProvider(): EmbeddingProvider {
   return createHuggingFaceEmbeddingProvider();
+}
+
+async function createLocalFeatureExtractor() {
+  const { env, pipeline } = await import("@huggingface/transformers");
+  env.cacheDir = join(tmpdir(), "closer-transformers-cache");
+
+  return pipeline("feature-extraction", LOCAL_TRANSFORMERS_MODEL, {
+    dtype: "q8",
+  });
+}
+
+type LocalFeatureExtractor = Awaited<
+  ReturnType<typeof createLocalFeatureExtractor>
+>;
+
+let localFeatureExtractorPromise: Promise<LocalFeatureExtractor> | undefined;
+
+async function getLocalFeatureExtractor(): Promise<LocalFeatureExtractor> {
+  localFeatureExtractorPromise ??= createLocalFeatureExtractor();
+
+  try {
+    return await localFeatureExtractorPromise;
+  } catch (error) {
+    localFeatureExtractorPromise = undefined;
+    throw error;
+  }
+}
+
+/** Runs MiniLM in-process with ONNX Runtime; no inference API token is used. */
+export function createLocalEmbeddingProvider(): EmbeddingProvider {
+  return {
+    model: EMBEDDING_MODEL,
+    async embedText(text: string): Promise<number[]> {
+      const input = text.trim();
+
+      if (input.length === 0) {
+        throw new EmbeddingProviderError(
+          "INVALID_INPUT",
+          "Cannot embed an empty chunk.",
+        );
+      }
+
+      try {
+        const extractor = await getLocalFeatureExtractor();
+        const output = await extractor(input, {
+          pooling: "mean",
+          normalize: true,
+        });
+
+        return assertEmbeddingDimensions(Array.from(output.data));
+      } catch (error) {
+        if (error instanceof EmbeddingProviderError) {
+          throw error;
+        }
+
+        throw new EmbeddingProviderError(
+          "UNAVAILABLE",
+          "The local embedding model could not be loaded or run.",
+        );
+      }
+    },
+  };
+}
+
+export function getLocalEmbeddingProvider(): EmbeddingProvider {
+  return createLocalEmbeddingProvider();
 }

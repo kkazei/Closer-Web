@@ -9,7 +9,12 @@ import { z } from "zod";
 
 import { createAuthAccount, getAuthAccountByEmail } from "@/data";
 import type { AuthActionState } from "@/lib/auth/action-state";
-import { clearSessionCookie, createToken, setSessionCookie } from "@/lib/auth/session";
+import {
+  assertSessionSigningKeyConfigured,
+  clearSessionCookie,
+  createToken,
+  setSessionCookie,
+} from "@/lib/auth/session";
 
 function readText(formData: FormData, fieldName: string): string {
   const value = formData.get(fieldName);
@@ -91,6 +96,23 @@ function accountCreationError(): AuthActionState {
   };
 }
 
+function authFailureCategory(error: unknown): string {
+  if (error instanceof Error && error.message.includes("JWT_SECRET")) {
+    return "JWT_SECRET_MISCONFIGURED";
+  }
+
+  if (
+    error instanceof Error &&
+    error.name === "DataAccessError" &&
+    "code" in error &&
+    typeof error.code === "string"
+  ) {
+    return error.code;
+  }
+
+  return error instanceof Error ? error.name : "UNKNOWN";
+}
+
 export async function signUp(
   _previousState: AuthActionState,
   formData: FormData,
@@ -108,23 +130,36 @@ export async function signUp(
 
   const { email, password, fullName } = parsed.data;
 
+  let signupStage = "session configuration";
+
   try {
+    assertSessionSigningKeyConfigured();
+
+    signupStage = "account lookup";
     const existingAccount = await getAuthAccountByEmail(email);
 
     if (existingAccount) {
       return accountCreationError();
     }
 
+    signupStage = "password hashing";
     const passwordHash = await hash(password, 12);
+
+    signupStage = "account creation";
     const account = await createAuthAccount({
       email,
       passwordHash,
       fullName: fullName || null,
     });
+
+    signupStage = "session creation";
     const token = await createToken({ userId: account.id, email: account.email });
 
     await setSessionCookie(token);
-  } catch {
+  } catch (error) {
+    console.error(
+      `[auth] Sign-up failed during ${signupStage} (${authFailureCategory(error)}).`,
+    );
     return accountCreationError();
   }
 

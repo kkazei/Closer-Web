@@ -48,8 +48,8 @@ export function KnowledgeCreateForm({
       </label>
       <div className="knowledge-form-footer">
         <p>
-          Content is normalized, chunked, embedded, and stored for tenant-scoped
-          retrieval. Plain text only.
+          Plain text is embedded locally for tenant-scoped retrieval. The first
+          use downloads the quantized model and caches it on this server.
         </p>
         <SubmitButton />
       </div>

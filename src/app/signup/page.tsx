@@ -1,31 +1,28 @@
 import Link from "next/link";
 
+import { AuthFrame } from "@/app/_components/auth-frame";
 import { SignupForm } from "./signup-form";
 
 export const dynamic = "force-dynamic";
 
 export default function SignupPage() {
   return (
-    <main className="auth-page">
-      <section className="auth-card">
-        <div className="auth-heading">
-          <p className="auth-kicker">Closer / Workspace</p>
-          <h1>Create account</h1>
-          <p>
-            Create a workspace account. Email verification is optional for this
-            portfolio demo.
-          </p>
-        </div>
+    <AuthFrame
+      description="Set up a workspace, add the information your assistant should know, and review conversations from your visitors."
+      headline="Give your business a better first response."
+    >
+      <div className="auth-heading">
+        <p className="auth-kicker">Start with Closer</p>
+        <h1>Create account</h1>
+        <p>Email verification is optional in this portfolio demo.</p>
+      </div>
 
-        <SignupForm />
+      <SignupForm />
 
-        <p className="auth-switch">
-          Already have an account?{" "}
-          <Link className="underline underline-offset-4" href="/login">
-            Sign in
-          </Link>
-        </p>
-      </section>
-    </main>
+      <p className="auth-switch">
+        Already have an account?{" "}
+        <Link href="/login">Sign in</Link>
+      </p>
+    </AuthFrame>
   );
 }

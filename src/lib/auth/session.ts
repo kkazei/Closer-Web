@@ -27,6 +27,10 @@ function getSigningKey(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+export function assertSessionSigningKeyConfigured(): void {
+  getSigningKey();
+}
+
 export async function createToken(input: AuthTokenPayload): Promise<string> {
   if (!UUID_PATTERN.test(input.userId)) {
     throw new Error("Cannot create a session for an invalid user ID.");

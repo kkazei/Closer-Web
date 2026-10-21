@@ -1,4 +1,5 @@
 import { listKnowledgeDocumentsByBusinessId, type DocumentStatus } from "@/data";
+import Link from "next/link";
 
 import { ArchiveDocumentForm } from "../_components/archive-document-form";
 import {
@@ -53,9 +54,19 @@ export default async function KnowledgePage({
             Manage the approved plain-text sources used to ground Closer responses.
           </p>
         </div>
-        <div className="dashboard-page-index" aria-label="Knowledge documents shown">
-          <span>Documents</span>
-          <strong>{String(documents.length).padStart(2, "0")}</strong>
+        <div className="knowledge-header-actions">
+          <Link
+            className="button button-secondary"
+            href={`/chat/${business.slug}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Preview visitor chat
+          </Link>
+          <div className="dashboard-page-index" aria-label="Knowledge documents shown">
+            <span>Documents</span>
+            <strong>{String(documents.length).padStart(2, "0")}</strong>
+          </div>
         </div>
       </header>
 

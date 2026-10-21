@@ -13,7 +13,7 @@ AI-powered sales assistant that qualifies leads through intelligent conversation
 - **ORM:** Drizzle ORM
 - **Database:** PostgreSQL (Supabase) + pgvector
 - **LLM:** Groq API
-- **Embeddings:** Hugging Face Inference API (`sentence-transformers/all-MiniLM-L6-v2`)
+- **Embeddings:** Local Transformers.js/ONNX (`Xenova/all-MiniLM-L6-v2`)
 - **Deployment:** Vercel
 
 ## Development
@@ -58,7 +58,6 @@ Then configure the following variables in `.env.local`:
 | Variable | Description |
 |---|---|
 | `GROQ_API_KEY` | Server-only Groq API key for chat generation |
-| `HF_TOKEN` | Server-only Hugging Face token with Inference Providers permission |
 
 ### Development-only seed configuration
 | Variable | Description |
@@ -78,10 +77,9 @@ variables in the Vercel `production` and `preview` environments:
 - `DATABASE_URL`
 - `JWT_SECRET`
 - `GROQ_API_KEY`
-- `HF_TOKEN`
 
-`DATABASE_URL`, `JWT_SECRET`, `GROQ_API_KEY`, and `HF_TOKEN` are server-only
-secrets. `DIRECT_URL` is used by
+`DATABASE_URL`, `JWT_SECRET`, and `GROQ_API_KEY` are server-only secrets.
+`DIRECT_URL` is used by
 Drizzle migrations and should remain an operator/local variable rather than a
 normal runtime deployment variable. Development seed controls are not
 configured in production.
@@ -113,8 +111,9 @@ higher-priority system instructions.
 
 Database fixture suites should be run sequentially because several use the
 same seeded businesses while others create temporary rollback-only fixtures.
-The live RAG smoke test requires configured server-only `GROQ_API_KEY` and
-`HF_TOKEN` values:
+The live RAG smoke test requires a configured server-only `GROQ_API_KEY`.
+It runs the embedding model locally and downloads its quantized weights the
+first time it is used:
 
 ```bash
 npm run db:check
@@ -126,10 +125,10 @@ npm run db:test-rag-chat-live
 ```
 
 `npm run db:eval-rag` runs a read-only retrieval evaluation against the seeded
-Northstar Labs knowledge base. It requires `DATABASE_URL`, `HF_TOKEN`, and
+Northstar Labs knowledge base. It requires `DATABASE_URL` and
 `CLOSER_SEED_USER_ID` set to the profile UUID that owns the seeded business.
-It uses the real embedding provider and runs the production retrieval
-primitive inside the authenticated RLS transaction. The seeded chunks must have
+It runs the local embedding model and production retrieval primitive inside
+the authenticated RLS transaction. The seeded chunks must have
 embeddings from the configured model; the seed script creates placeholder
 chunks without embeddings. The evaluation writes its metrics and
 recommendation to `docs/rag-eval-results.md`.
@@ -163,6 +162,22 @@ npm run db:seed -- --confirm-development
 ```
 
 Without `CLOSER_SEED_USER_ID`, the seed skips `profiles` and `business_memberships`.
+
+### Public homepage demo
+
+The homepage's **Try the live demo** link opens a fictional Northstar Fitness
+assistant at `/chat/northstar-fitness`. To prepare its business record and
+ready, locally embedded knowledge chunks in a development database, run:
+
+```powershell
+$env:CLOSER_SEED_MODE = "development"
+npm run demo:seed -- --confirm-development
+```
+
+The seed updates only the fixed demo business and its guide. It requires
+`DIRECT_URL`, refuses production mode, and downloads the quantized embedding
+model on first use. Chat replies also require `GROQ_API_KEY`. All sample
+business details and prices are fictional.
 
 ## Authentication
 
@@ -294,14 +309,17 @@ initiate ingestion or archive documents.
 The pipeline is:
 
 ```text
-plain text → normalize → paragraph-aware chunks → Hugging Face embeddings →
+plain text → normalize → paragraph-aware chunks → local ONNX embeddings →
 384-dimensional pgvector chunks → ready
 ```
 
-It uses `sentence-transformers/all-MiniLM-L6-v2` through Hugging Face's current
-router feature-extraction endpoint. `HF_TOKEN` is server-only and is never
-stored in document metadata, database rows, logs, or responses. The model's
-384-dimensional vectors are validated exactly; invalid dimensions are rejected.
+It uses the 8-bit quantized `Xenova/all-MiniLM-L6-v2` model through Transformers.js
+and ONNX Runtime on the server CPU. Model files are downloaded from the public
+Hugging Face Hub and cached locally on first use; no Hugging Face Inference
+Provider token or credits are needed. Ingestion and query retrieval use the
+same 384-dimensional model and validate vector size before storage or search.
+This local CPU setup is intended for development and demos; serverless instances
+may need to download the model again after a cold start.
 
 Chunking targets 1,200 characters with a 180-character suffix overlap and a
 hard 1,600-character chunk limit. Paragraphs are grouped first, then split at

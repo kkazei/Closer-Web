@@ -11,7 +11,7 @@ import {
   assertEmbeddingDimensions,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
-  getHuggingFaceEmbeddingProvider,
+  getLocalEmbeddingProvider,
 } from "./embeddings";
 import type { EmbeddingProvider, RetrievedChunk, RetrievalQuery } from "./types";
 
@@ -142,7 +142,7 @@ async function retrieveKnowledgeWithDatabase(
   const similarityThreshold = normalizeSimilarityThreshold(
     input.similarityThreshold,
   );
-  const provider = input.provider ?? getHuggingFaceEmbeddingProvider();
+  const provider = input.provider ?? getLocalEmbeddingProvider();
   const queryEmbedding = await createQueryEmbedding(query, provider);
   const serializedVector = serializeVector(queryEmbedding);
 

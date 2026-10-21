@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+
+import { APP_DESCRIPTION, APP_NAME } from "@/lib/constants";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Closer — AI Sales Assistant",
-  description:
-    "AI-powered sales assistant that qualifies leads through intelligent conversation.",
+  title: `${APP_NAME} — AI Sales Workspace`,
+  description: APP_DESCRIPTION,
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

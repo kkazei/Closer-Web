@@ -20,7 +20,7 @@ import {
 } from "./chunking";
 import {
   assertEmbeddingDimensions,
-  createHuggingFaceEmbeddingProvider,
+  createLocalEmbeddingProvider,
   type EmbeddingProviderError,
 } from "./embeddings";
 import type {
@@ -38,6 +38,19 @@ function failureCategory(error: unknown): string {
   return error && typeof error === "object" && "code" in error
     ? String((error as { code: unknown }).code)
     : "PROCESSING_ERROR";
+}
+
+function failureHttpStatus(error: unknown): number | null {
+  if (
+    error &&
+    typeof error === "object" &&
+    "httpStatus" in error &&
+    typeof error.httpStatus === "number"
+  ) {
+    return error.httpStatus;
+  }
+
+  return null;
 }
 
 function assertIngestionDeadline(startedAt: number): void {
@@ -125,7 +138,7 @@ export async function ingestKnowledgeDocument(
 
   const authorizedDocument = await authorizeAndMarkProcessing(input);
   const startedAt = Date.now();
-  const provider = input.provider ?? createHuggingFaceEmbeddingProvider();
+  const provider = input.provider ?? createLocalEmbeddingProvider();
 
   try {
     const chunks = chunkDocumentText(input.content);
@@ -170,6 +183,7 @@ export async function ingestKnowledgeDocument(
       businessId: authorizedDocument.businessId,
       documentId: authorizedDocument.documentId,
       category: failureCategory(error),
+      httpStatus: failureHttpStatus(error),
     });
 
     try {
@@ -188,6 +202,12 @@ export async function ingestKnowledgeDocument(
 
     if (providerError.code === "CONFIGURATION") {
       throw new Error("Knowledge embeddings are not configured.");
+    }
+
+    if (providerError.code === "INSUFFICIENT_CREDITS") {
+      throw new Error(
+        "Hugging Face Inference Providers has no remaining credits. Add prepaid credits, then retry ingestion.",
+      );
     }
 
     throw new Error("Knowledge document ingestion failed.");

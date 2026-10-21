@@ -33,10 +33,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:seed": "node scripts/seed-development.mjs"
+    "db:seed": "node scripts/seed-development.mjs",
+    "demo:seed": "node scripts/seed-demo-business.mjs",
+    "demo:knowledge": "node scripts/seed-demo-knowledge.mjs"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.28",
+    "@huggingface/transformers": "^3.8.1",
     "ai": "^7.0.66",
     "bcryptjs": "^3.0.3",
     "drizzle-orm": "^0.45.2",
@@ -61,5 +64,8 @@
     "jest": "^30.5.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "onnxruntime-node@1.21.0": true
   }
 }

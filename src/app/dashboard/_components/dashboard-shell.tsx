@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+import { CloserMark } from "@/app/_components/closer-mark";
+
 type DashboardBusinessOption = Readonly<{
   id: string;
   name: string;
@@ -20,11 +22,50 @@ type DashboardShellProps = Readonly<{
 }>;
 
 const navigation = [
-  { label: "Overview", path: "/dashboard" },
-  { label: "Leads", path: "/dashboard/leads" },
-  { label: "Conversations", path: "/dashboard/conversations" },
-  { label: "Knowledge", path: "/dashboard/knowledge" },
+  { label: "Overview", path: "/dashboard", icon: "overview" },
+  { label: "Leads", path: "/dashboard/leads", icon: "leads" },
+  { label: "Conversations", path: "/dashboard/conversations", icon: "conversations" },
+  { label: "Knowledge", path: "/dashboard/knowledge", icon: "knowledge" },
 ] as const;
+
+function DashboardNavIcon({
+  kind,
+}: {
+  kind: (typeof navigation)[number]["icon"];
+}) {
+  switch (kind) {
+    case "overview":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="5.5" height="5.5" rx="1" />
+          <rect x="11.5" y="3" width="5.5" height="5.5" rx="1" />
+          <rect x="3" y="11.5" width="5.5" height="5.5" rx="1" />
+          <rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1" />
+        </svg>
+      );
+    case "leads":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <circle cx="8" cy="6.5" r="3" />
+          <path d="M2.75 16.5a5.25 5.25 0 0 1 10.5 0M14 4.25a3 3 0 0 1 0 5.5m1.25 2a4.5 4.5 0 0 1 2 3.75" />
+        </svg>
+      );
+    case "conversations":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3 4.5A2.5 2.5 0 0 1 5.5 2h8A2.5 2.5 0 0 1 16 4.5v4a2.5 2.5 0 0 1-2.5 2.5h-4l-3.75 2.5v-2.5H5.5A2.5 2.5 0 0 1 3 8.5v-4Z" />
+          <path d="M8 14h6.5A2.5 2.5 0 0 0 17 11.5v-1" />
+        </svg>
+      );
+    case "knowledge":
+      return (
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M3 4.25A1.75 1.75 0 0 1 4.75 2.5H9v14H4.75A1.75 1.75 0 0 0 3 18.25v-14Zm14 0a1.75 1.75 0 0 0-1.75-1.75H11v14h4.25A1.75 1.75 0 0 1 17 18.25v-14Z" />
+          <path d="M5.25 5.5H7m7.75 0H13" />
+        </svg>
+      );
+  }
+}
 
 function buildPath(
   path: string,
@@ -62,7 +103,7 @@ export function DashboardShell({
     <div className="dashboard-app">
       <header className="dashboard-topbar">
         <Link className="dashboard-brand" href={buildPath("/dashboard", selectedBusinessId)}>
-          <span className="dashboard-brand-mark" aria-hidden="true">C</span>
+          <CloserMark />
           <span>Closer</span>
         </Link>
 
@@ -116,7 +157,7 @@ export function DashboardShell({
                   href={buildPath(item.path, selectedBusinessId)}
                   key={item.path}
                 >
-                  <span className="dashboard-nav-rule" aria-hidden="true" />
+                  <span className="dashboard-nav-icon"><DashboardNavIcon kind={item.icon} /></span>
                   {item.label}
                 </Link>
               );

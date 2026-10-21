@@ -1,9 +1,10 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
 import type { InferSelectModel } from "drizzle-orm";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, privilegedDb } from "@/db";
 import { businesses, businessMemberships } from "@/db/schema";
 
 import { withDataAccess } from "./internal";
@@ -88,5 +89,46 @@ export async function listBusinessesForProfileId(
       .orderBy(asc(businesses.name), asc(businesses.id));
 
     return rows.map((business) => toBusinessDTO(business));
+  });
+}
+
+/** Creates a business and its initial owner membership atomically. */
+export async function createBusinessForOwner(
+  name: string,
+  ownerProfileId: string,
+): Promise<BusinessDTO> {
+  const normalizedName = assertNonBlank(name, "name").trim();
+  const normalizedOwnerId = assertUuid(ownerProfileId, "ownerProfileId");
+
+  if (normalizedName.length > 100) {
+    throw new Error("Business name must be 100 characters or fewer.");
+  }
+
+  const id = randomUUID();
+  const baseSlug = normalizedName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 50)
+    .replace(/-+$/g, "");
+  const slug = `${baseSlug || "workspace"}-${id.slice(0, 8)}`;
+
+  return withDataAccess("create business workspace", async () => {
+    return privilegedDb.transaction(async (transaction) => {
+      const [business] = await transaction
+        .insert(businesses)
+        .values({ id, name: normalizedName, slug })
+        .returning(businessSelection);
+
+      await transaction.insert(businessMemberships).values({
+        businessId: id,
+        profileId: normalizedOwnerId,
+        role: "owner",
+      });
+
+      return toBusinessDTO(business);
+    });
   });
 }

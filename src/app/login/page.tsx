@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AuthFrame } from "@/app/_components/auth-frame";
 import { LoginForm } from "./login-form";
 
 export const dynamic = "force-dynamic";
@@ -13,23 +14,22 @@ export default async function LoginPage({
   const next = typeof params.next === "string" ? params.next : undefined;
 
   return (
-    <main className="auth-page">
-      <section className="auth-card">
-        <div className="auth-heading">
-          <p className="auth-kicker">Closer / Workspace</p>
-          <h1>Sign in</h1>
-          <p>Use your Closer account to access the protected workspace.</p>
-        </div>
+    <AuthFrame
+      description="Bring your business knowledge, visitor conversations, and next steps into one focused workspace."
+      headline="Make every conversation count."
+    >
+      <div className="auth-heading">
+        <p className="auth-kicker">Welcome back</p>
+        <h1>Sign in</h1>
+        <p>Use your Closer account to open your business workspace.</p>
+      </div>
 
-        <LoginForm redirectTo={next} />
+      <LoginForm redirectTo={next} />
 
-        <p className="auth-switch">
-          Need an account?{" "}
-          <Link className="underline underline-offset-4" href="/signup">
-            Create one
-          </Link>
-        </p>
-      </section>
-    </main>
+      <p className="auth-switch">
+        New to Closer?{" "}
+        <Link href="/signup">Create an account</Link>
+      </p>
+    </AuthFrame>
   );
 }

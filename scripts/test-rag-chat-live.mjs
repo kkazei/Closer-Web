@@ -16,15 +16,15 @@ if (!process.env.DATABASE_URL || !process.env.DIRECT_URL) {
   throw new Error("DATABASE_URL and DIRECT_URL are required.");
 }
 
-if (!process.env.GROQ_API_KEY || !process.env.HF_TOKEN) {
-  throw new Error("GROQ_API_KEY and HF_TOKEN are required for the live test.");
+if (!process.env.GROQ_API_KEY) {
+  throw new Error("GROQ_API_KEY is required for the live test.");
 }
 
 const { POST } = await import("../src/app/api/chat/route.ts");
 const { closePrivilegedDb } = await import("../src/db/index.ts");
 const {
   EMBEDDING_MODEL,
-  getHuggingFaceEmbeddingProvider,
+  getLocalEmbeddingProvider,
 } = await import("../src/rag/embeddings.ts");
 
 const direct = postgres(process.env.DIRECT_URL, {
@@ -98,7 +98,7 @@ async function setupFixtures() {
     )
   `;
 
-  const provider = getHuggingFaceEmbeddingProvider();
+  const provider = getLocalEmbeddingProvider();
   const embedding = await provider.embedText(knowledgeContent);
   assert.equal(embedding.length, 384);
 

@@ -51,7 +51,7 @@ function loadEnvironment(): void {
     process.loadEnvFile(".env");
   }
 
-  const missing = ["DATABASE_URL", "HF_TOKEN", "CLOSER_SEED_USER_ID"].filter(
+  const missing = ["DATABASE_URL", "CLOSER_SEED_USER_ID"].filter(
     (name) => !process.env[name],
   );
 
@@ -230,7 +230,7 @@ function renderResults(
     `- Business: ${fixture.businessSlug} (${fixture.businessId})`,
     `- Questions: ${fixture.questions.length} (${fixture.questions.filter((item) => item.answerable).length} answerable, ${fixture.questions.filter((item) => !item.answerable).length} unanswerable)`,
     `- Labeled chunk coverage: ${coveredChunks}/${expectedChunks}${calibrated ? " (complete)" : " (incomplete; do not use these metrics to change defaults)"}`,
-    "- Retrieval used the existing Hugging Face embedding provider and `retrieveKnowledge` inside `withAuthenticatedDb`. PostgreSQL RLS and the explicit business filter both apply. The script issues read-only retrieval queries.",
+    "- Retrieval used the local MiniLM embedding model and `retrieveKnowledge` inside `withAuthenticatedDb`. PostgreSQL RLS and the explicit business filter both apply. The script issues read-only retrieval queries.",
     "",
     "## Results by configuration",
     "",
@@ -255,12 +255,12 @@ async function main(): Promise<void> {
     "../src/db/index"
   );
   const { retrieveKnowledge } = await import("../src/rag/retrieval");
-  const { getHuggingFaceEmbeddingProvider } = await import(
+  const { getLocalEmbeddingProvider } = await import(
     "../src/rag/embeddings"
   );
 
   try {
-    const provider = getHuggingFaceEmbeddingProvider();
+    const provider = getLocalEmbeddingProvider();
     const baseline = new Map<string, RetrievedChunk[]>();
     const observedChunkIds = new Set<string>();
 
